@@ -51,7 +51,7 @@ using namespace crazyara;
 
 class MCTSAgent : public Agent
 {
-private:
+protected:
     SearchSettings* searchSettings;
     vector<SearchThread*> searchThreads;
     unique_ptr<TimeManager> timeManager;
@@ -84,10 +84,18 @@ private:
     GCThread<Node> gcThread;
 
 public:
+#ifdef MPV_MCTS
+    MCTSAgent(NeuralNetAPI* smallNetSingle,
+              NeuralNetAPI* largeNetSingle,
+              vector<unique_ptr<NeuralNetAPI>>& netBatches,
+              SearchSettings* searchSettings,
+              PlaySettings* playSettings);
+#endif
     MCTSAgent(NeuralNetAPI* netSingle,
               vector<unique_ptr<NeuralNetAPI>>& netBatches,
               SearchSettings* searchSettings,
               PlaySettings* playSettings);
+
     ~MCTSAgent();
     MCTSAgent(const MCTSAgent&) = delete;
     MCTSAgent& operator=(MCTSAgent const&) = delete;

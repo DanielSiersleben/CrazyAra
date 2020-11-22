@@ -35,7 +35,32 @@
 #include "../util/communication.h"
 #include "util/gcthread.h"
 
+#ifdef MPV_MCTS
+MCTSAgent::MCTSAgent(NeuralNetAPI *smallNetSingle, NeuralNetAPI *largeNetSingle, vector<unique_ptr<NeuralNetAPI>>& netBatches,
+                     SearchSettings* searchSettings, PlaySettings* playSettings):
+    Agent(smallNetSingle, largeNetSingle, playSettings, true),
+    searchSettings(searchSettings),
+    rootNode(nullptr),
+    rootState(nullptr),
+    ownNextRoot(nullptr),
+    opponentsNextRoot(nullptr),
+    lastValueEval(-1.0f),
+    reusedFullTree(false),
+    isRunning(false),
+    overallNPS(0.0f),
+    nbNPSentries(0),
+    threadManager(nullptr),
+    gcThread()
+{
+    mapWithMutex.hashTable.reserve(1e6);
 
+    for (auto i = 0; i < searchSettings->threads; ++i) {
+        searchThreads.emplace_back(new SearchThread(netBatches[i].get(), searchSettings, &mapWithMutex));
+    }
+    timeManager = make_unique<TimeManager>(searchSettings->randomMoveFactor);
+    generator = default_random_engine(r());
+}
+#endif
 MCTSAgent::MCTSAgent(NeuralNetAPI *netSingle, vector<unique_ptr<NeuralNetAPI>>& netBatches,
                      SearchSettings* searchSettings, PlaySettings* playSettings):
     Agent(netSingle, playSettings, true),
@@ -287,8 +312,15 @@ void MCTSAgent::evaluate_board_state()
 
 void MCTSAgent::run_mcts_search()
 {
-    thread** threads = new thread*[searchSettings->threads];
-    for (size_t i = 0; i < searchSettings->threads; ++i) {
+    int totalThreads;
+#ifdef MPV_MCTS
+    totalThreads = searchSettings->threads + searchSettings->mpvThreads;
+#else
+    totalThreads = searchSettings->threads;
+#endif
+
+    thread** threads = new thread*[totalThreads];
+    for (size_t i = 0; i < totalThreads; ++i) {
         searchThreads[i]->set_root_node(rootNode);
         searchThreads[i]->set_root_state(rootState);
         searchThreads[i]->set_search_limits(searchLimits);
@@ -301,7 +333,7 @@ void MCTSAgent::run_mcts_search()
     unique_ptr<thread> tManager = make_unique<thread>(run_thread_manager, threadManager.get());
     isRunning = true;
 
-    for (size_t i = 0; i < searchSettings->threads; ++i) {
+    for (size_t i = 0; i < totalThreads; ++i) {
         threads[i]->join();
     }
     threadManager->kill();

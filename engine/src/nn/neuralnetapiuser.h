@@ -46,7 +46,18 @@ protected:
     float* valueOutputs;
     float* probOutputs;
 
+private:
+#ifdef MPV_MCTS
+    NeuralNetAPI* largeNet;
+    float* largeNetInputPlanes;
+    float* largeNetValueOutputs;
+    float* largeNetProbOutputs;
+#endif
+
 public:
+#ifdef MPV_MCTS
+    NeuralNetAPIUser(NeuralNetAPI* smallNet, NeuralNetAPI* largeNet);
+#endif
     NeuralNetAPIUser(NeuralNetAPI* net);
     ~NeuralNetAPIUser();
     NeuralNetAPIUser(NeuralNetAPIUser&) = delete;

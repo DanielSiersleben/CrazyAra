@@ -63,6 +63,10 @@ protected:
 public:
     Agent(NeuralNetAPI* net, PlaySettings* playSettings, bool verbose);
 
+#ifdef MPV_MCTS
+    Agent(NeuralNetAPI* smallNet, NeuralNetAPI* largeNet, PlaySettings* playSettings, bool verbose);
+#endif
+
     /**
      * @brief perform_action Selects an action based on the evaluation result
      */

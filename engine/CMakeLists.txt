@@ -14,6 +14,13 @@ option(MODE_CRAZYHOUSE           "Build with crazyhouse only support"  ON)
 option(MODE_CHESS                "Build with chess + chess960 only support"  OFF)
 option(MODE_LICHESS              "Build with lichess variants support"  OFF)
 
+# enable MPV_MCTS
+option(MPV_MCTS           "Build with Multiple Policy Value MCTS"  ON)
+
+if (MPV_MCTS)
+    add_definitions(-DMPV_MCTS)
+endif()
+
 add_definitions(-DIS_64BIT)
 add_definitions(-DCRAZYHOUSE)
 
@@ -124,6 +131,7 @@ include_directories("3rdparty/catch-2.9.1")
 # incude dirent library seperately because it's missing in the stdlib
 if(MSVC OR MSYS OR MINGW)
     include_directories("3rdparty/dirent")
+    include_directories("lib/dirent")
 endif()
 
 include_directories("src/domain/crazyhouse")
@@ -187,7 +195,7 @@ if (BACKEND_TENSORRT)
     # add additional source file
     set(source_files
         ${source_files}
-        $ENV{TENSORRT_PATH}/samples/common/logger.cpp
+        C:/TensorRT-7.2.1.6/samples/common/logger.cpp
         )
     find_package(CUDA REQUIRED)
     message(STATUS "CUDA path: $ENV{CUDA_PATH}")
@@ -200,8 +208,8 @@ if(WIN32)
     HINTS  ${TENSORRT_PATH}
     PATH_SUFFIXES lib lib64 lib/x64)
 endif()
-    include_directories("$ENV{TENSORRT_PATH}/include")
-    include_directories("$ENV{TENSORRT_PATH}/samples/common/")
+    include_directories(C:/TensorRT-7.2.1.6/include)
+    include_directories(C:/TensorRT-7.2.1.6/samples/common/)
     add_definitions(-DTENSORRT)
 endif()
 
@@ -212,7 +220,7 @@ endif()
 add_executable(${PROJECT_NAME} ${source_files})
 
 if (BACKEND_TENSORRT)
-    target_link_libraries(${PROJECT_NAME} nvonnxparser nvinfer cudart myelin ${CUDART_LIB} ${CUBLAS_LIB} ${CUDNN_LIB})
+    target_link_libraries(${PROJECT_NAME} nvonnxparser nvinfer cudart myelin64_1 ${CUDART_LIB} ${CUBLAS_LIB} ${CUDNN_LIB})
 endif()
 
 if (USE_RL)

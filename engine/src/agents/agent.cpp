@@ -51,12 +51,20 @@ void Agent::set_best_move(size_t moveCounter)
         evalInfo->bestMove = evalInfo->pv[0][0];
     }
 }
-
+#ifdef MPV_MCTS
+Agent::Agent(NeuralNetAPI* smallNet, NeuralNetAPI* largeNet, PlaySettings* playSettings, bool verbose):
+    NeuralNetAPIUser(smallNet, largeNet),
+    playSettings(playSettings), verbose(verbose)
+{
+}
+#endif
 Agent::Agent(NeuralNetAPI* net, PlaySettings* playSettings, bool verbose):
     NeuralNetAPIUser(net),
     playSettings(playSettings), verbose(verbose)
 {
 }
+
+
 
 void Agent::set_search_settings(StateObj *pos, SearchLimits *searchLimits, EvalInfo* evalInfo)
 {

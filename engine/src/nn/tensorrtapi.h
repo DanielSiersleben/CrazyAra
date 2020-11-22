@@ -52,6 +52,7 @@ enum Precision {
     int8
 };
 
+using namespace sample;
 template <typename T>
     using SampleUniquePtr = std::unique_ptr<T, samplesCommon::InferDeleter>;
 

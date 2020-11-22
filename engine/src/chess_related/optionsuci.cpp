@@ -54,6 +54,9 @@ void OptionsUCI::init(OptionsMap &o)
 #else
     o["Batch_Size"]                    << Option(16, 1, 8192);
 #endif
+#ifdef MPV_MCTS
+    o["MPVThreads"]                       << Option(1, 1, 512);
+#endif
     o["Threads"]                       << Option(2, 1, 512);
     o["Centi_CPuct_Init"]              << Option(250, 1, 99999);
     o["CPuct_Base"]                    << Option(19652, 1, 99999);
@@ -100,7 +103,10 @@ void OptionsUCI::init(OptionsMap &o)
     o["Use_TensorRT"]                  << Option(true);
     o["Precision"]                     << Option("float16", {"float32", "float16", "int8"});
 #endif
-#ifdef MODE_CRAZYHOUSE
+#ifdef MPV_MCTS
+    o["Small_Model_Directory"]               << Option("model/small_net");
+    o["Large_Model_Directory"]               << Option("model/large_net");
+#elif MODE_CRAZYHOUSE
     o["Model_Directory"]               << Option("model");
 #else
     o["Model_Directory"]               << Option("model");

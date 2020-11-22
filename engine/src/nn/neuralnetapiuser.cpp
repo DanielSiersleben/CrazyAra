@@ -31,6 +31,31 @@
 #include "common.h"
 #endif
 
+#ifdef MPV_MCTS
+NeuralNetAPIUser::NeuralNetAPIUser(NeuralNetAPI *smallNet, NeuralNetAPI *largeNet):
+    net(smallNet),
+    largeNet(largeNet)
+{
+    // allocate memory for all predictions and results
+#ifdef TENSORRT
+    CHECK(cudaMallocHost((void**) &inputPlanes, net->get_batch_size() * StateConstants::NB_VALUES_TOTAL() * sizeof(float)));
+    CHECK(cudaMallocHost((void**) &valueOutputs, net->get_batch_size() * sizeof(float)));
+    CHECK(cudaMallocHost((void**) &probOutputs, net->get_policy_output_length() * sizeof(float)));
+
+    CHECK(cudaMallocHost((void**) &largeNetInputPlanes, largeNet->get_batch_size() * StateConstants::NB_VALUES_TOTAL() * sizeof(float)));
+    CHECK(cudaMallocHost((void**) &largeNetValueOutputs, largeNet->get_batch_size() * sizeof(float)));
+    CHECK(cudaMallocHost((void**) &largeNetProbOutputs, largeNet->get_policy_output_length() * sizeof(float)));
+#else
+    inputPlanes = new float[net->get_batch_size() * StateConstants::NB_VALUES_TOTAL()];
+    valueOutputs = new float[net->get_batch_size()];
+    probOutputs = new float[net->get_policy_output_length()];
+
+    largeNetInputPlanes = new float[largeNet->get_batch_size() * StateConstants::NB_VALUES_TOTAL()];
+    largeNetalueOutputs = new float[largeNet->get_batch_size()];
+    largeNetProbOutputs = new float[largeNet->get_policy_output_length()];
+#endif
+}
+#endif
 NeuralNetAPIUser::NeuralNetAPIUser(NeuralNetAPI *net):
     net(net)
 {
@@ -56,5 +81,17 @@ NeuralNetAPIUser::~NeuralNetAPIUser()
     delete [] inputPlanes;
     delete [] valueOutputs;
     delete [] probOutputs;
+#endif
+
+#ifdef MPV_MCTS
+#ifdef TENSORRT
+    CHECK(cudaFreeHost(largeNetInputPlanes));
+    CHECK(cudaFreeHost(largeNetValueOutputs));
+    CHECK(cudaFreeHost(largeNetProbOutputs));
+#else
+    delete [] largeNetInputPlanes;
+    delete [] largeNetValueOutputs;
+    delete [] largeNetProbOutputs;
+#endif
 #endif
 }
