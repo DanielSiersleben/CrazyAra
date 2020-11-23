@@ -90,6 +90,11 @@ private:
     bool hasNNResults;
     bool sorted;
 
+#ifdef MPV_MCTS
+    bool enqueued;
+    bool hasLargeNNResults;
+#endif
+
 public:
     /**
      * @brief Node Primary constructor which is used when expanding a node during search
@@ -105,6 +110,8 @@ public:
      * @brief ~Node Destructor which frees memory and the board position
      */
     ~Node();
+
+    bool evaluatedByLargeNet();
 
     /**
      * @brief get_current_u_values Calucates and returns the current u-values for this node
@@ -332,6 +339,11 @@ public:
 
     DynamicVector<uint32_t> get_child_number_visits() const;
     uint32_t get_child_number_visits(uint16_t childIdx) const;
+
+#ifdef MPV_MCTS
+    void enable_has_large_nn_results();
+    void enable_node_is_enqueued();
+#endif
 
     void enable_has_nn_results();
     uint16_t plies_from_null() const;

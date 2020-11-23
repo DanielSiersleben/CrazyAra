@@ -400,10 +400,9 @@ bool CrazyAra::is_ready()
         mpvNetBatches = create_new_mpvnet_batches(Options["Large_Model_Directory"]);
         mctsAgent = create_new_mpvmcts_agent(netSingle.get(), largeNetSingle.get(), netBatches, mpvNetBatches);
 #else
-        mctsAgent = create_new_mcts_agent(netSingle.get(), netBatches);
         netSingle = create_new_net_single(Options["Model_Directory"]);
         netBatches = create_new_net_batches(Options["Model_Directory"]);
-
+        mctsAgent = create_new_mcts_agent(netSingle.get(), netBatches);
 #endif
         rawAgent = make_unique<RawNetAgent>(netSingle.get(), &playSettings, false);
         StateConstants::init(mctsAgent->is_policy_map());
@@ -478,12 +477,12 @@ unique_ptr<MCTSAgent> CrazyAra::create_new_mpvmcts_agent(NeuralNetAPI* smallNetS
 {
     return make_unique<MPVMCTSAgent>(smallNetSingle, largeNetSingle, netBatches, mpvNetBatches, &searchSettings, &playSettings);
 }
-#endif
-
+#else
 unique_ptr<MCTSAgent> CrazyAra::create_new_mcts_agent(NeuralNetAPI* netSingle, vector<unique_ptr<NeuralNetAPI>>& netBatches)
 {
     return make_unique<MCTSAgent>(netSingle, netBatches, &searchSettings, &playSettings);
 }
+#endif
 
 void CrazyAra::init_search_settings()
 {
@@ -492,6 +491,7 @@ void CrazyAra::init_search_settings()
     searchSettings.threads = Options["Threads"] * get_num_gpus(Options);
 #ifdef MPV_MCTS
     searchSettings.mpvThreads = Options["mpvThreads"] * get_num_gpus(Options);
+    searchSettings.largeNetEvalThreshold = Options["largeNetThreshold"];
 #endif
     searchSettings.batchSize = Options["Batch_Size"];
     searchSettings.useTranspositionTable = Options["Use_Transposition_Table"];

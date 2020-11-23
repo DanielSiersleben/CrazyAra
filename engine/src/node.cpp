@@ -449,6 +449,18 @@ void Node::reserve_full_memory()
     d->nodeTypes.reserve(numberChildNodes);
 }
 
+#ifdef MPV_MCTS
+bool Node::evaluatedByLargeNet(){
+    return enqueued || hasLargeNNResults;
+}
+void Node::enable_has_large_nn_results(){
+    this->hasLargeNNResults = true;
+}
+void Node::enable_node_is_enqueued(){
+    this->enqueued = true;
+}
+#endif
+
 void Node::increment_no_visit_idx()
 {
     if (d->noVisitIdx < get_number_child_nodes()) {

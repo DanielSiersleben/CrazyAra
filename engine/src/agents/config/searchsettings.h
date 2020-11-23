@@ -34,7 +34,10 @@ struct SearchSettings
 {
     unsigned int multiPV;
     size_t threads;
+#ifdef MPV_MCTS
     size_t mpvThreads;
+    size_t largeNetEvalThreshold;
+#endif
     unsigned int batchSize;
     float dirichletEpsilon;
     float dirichletAlpha;

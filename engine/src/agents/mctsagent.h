@@ -80,6 +80,11 @@ protected:
     size_t tbHits;
     size_t nbNPSentries;
 
+#ifdef MPV_MCTS
+    //stores all Nodes to be evaluated by the bigger net
+    queue<Node*> nodeQueue;
+#endif
+
     unique_ptr<ThreadManager> threadManager;
     GCThread<Node> gcThread;
 
@@ -90,11 +95,12 @@ public:
               vector<unique_ptr<NeuralNetAPI>>& netBatches,
               SearchSettings* searchSettings,
               PlaySettings* playSettings);
-#endif
+#else
     MCTSAgent(NeuralNetAPI* netSingle,
               vector<unique_ptr<NeuralNetAPI>>& netBatches,
               SearchSettings* searchSettings,
               PlaySettings* playSettings);
+#endif
 
     ~MCTSAgent();
     MCTSAgent(const MCTSAgent&) = delete;

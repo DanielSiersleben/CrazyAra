@@ -54,13 +54,15 @@ MCTSAgent::MCTSAgent(NeuralNetAPI *smallNetSingle, NeuralNetAPI *largeNetSingle,
 {
     mapWithMutex.hashTable.reserve(1e6);
 
+    nodeQueue = queue<Node*>();
+
     for (auto i = 0; i < searchSettings->threads; ++i) {
-        searchThreads.emplace_back(new SearchThread(netBatches[i].get(), searchSettings, &mapWithMutex));
+        searchThreads.emplace_back(new SearchThread(netBatches[i].get(), searchSettings, &mapWithMutex, nodeQueue));
     }
     timeManager = make_unique<TimeManager>(searchSettings->randomMoveFactor);
     generator = default_random_engine(r());
 }
-#endif
+#else
 MCTSAgent::MCTSAgent(NeuralNetAPI *netSingle, vector<unique_ptr<NeuralNetAPI>>& netBatches,
                      SearchSettings* searchSettings, PlaySettings* playSettings):
     Agent(netSingle, playSettings, true),
@@ -85,6 +87,7 @@ MCTSAgent::MCTSAgent(NeuralNetAPI *netSingle, vector<unique_ptr<NeuralNetAPI>>& 
     timeManager = make_unique<TimeManager>(searchSettings->randomMoveFactor);
     generator = default_random_engine(r());
 }
+#endif
 
 MCTSAgent::~MCTSAgent()
 {
@@ -314,6 +317,8 @@ void MCTSAgent::run_mcts_search()
 {
     int totalThreads;
 #ifdef MPV_MCTS
+    nodeQueue = queue<Node*>();
+
     totalThreads = searchSettings->threads + searchSettings->mpvThreads;
 #else
     totalThreads = searchSettings->threads;

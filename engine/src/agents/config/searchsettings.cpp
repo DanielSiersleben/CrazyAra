@@ -28,6 +28,7 @@
 SearchSettings::SearchSettings():
 #ifdef MPV_MCTS
         mpvThreads(1),
+        largeNetEvalThreshold(1000),
 #endif
         threads(2),
         batchSize(2),

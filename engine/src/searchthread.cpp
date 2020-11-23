@@ -39,7 +39,25 @@ size_t SearchThread::get_max_depth() const
 {
     return depthMax;
 }
+#ifdef MPV_MCTS
+SearchThread::SearchThread(NeuralNetAPI *netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex, queue<Node*> nodeQueue):
+    NeuralNetAPIUser(netBatch),
+    isRunning(false), mapWithMutex(mapWithMutex), searchSettings(searchSettings)
+{
+    this->nodeQueue = nodeQueue;
 
+    largeNetEvalThreshold = searchSettings->largeNetEvalThreshold;
+
+    searchLimits = nullptr;  // will be set by set_search_limits() every time before go()
+
+    newNodes = make_unique<FixedVector<Node*>>(searchSettings->batchSize);
+    newNodeSideToMove = make_unique<FixedVector<SideToMove>>(searchSettings->batchSize);
+    transpositionValues = make_unique<FixedVector<float>>(searchSettings->batchSize*2);
+
+    trajectoryBuffer.reserve(DEPTH_INIT);
+    actionsBuffer.reserve(DEPTH_INIT);
+}
+#else
 SearchThread::SearchThread(NeuralNetAPI *netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex):
     NeuralNetAPIUser(netBatch),
     isRunning(false), mapWithMutex(mapWithMutex), searchSettings(searchSettings)
@@ -53,6 +71,7 @@ SearchThread::SearchThread(NeuralNetAPI *netBatch, SearchSettings* searchSetting
     trajectoryBuffer.reserve(DEPTH_INIT);
     actionsBuffer.reserve(DEPTH_INIT);
 }
+#endif
 
 void SearchThread::set_root_node(Node *value)
 {
@@ -146,6 +165,16 @@ float SearchThread::get_transposition_q_value(uint32_t transposVisits, double tr
     return (masterQsum - transposQsum) / (masterVisits - transposVisits);
 }
 
+#ifdef MPV_MCTS
+void SearchThread::addNodeToLargeNetQueue(Node* node){
+    if(node->get_no_visit_idx() >= largeNetEvalThreshold){
+        if(!node->evaluatedByLargeNet()){
+            nodeQueue.push(node);
+        }
+    }
+}
+#endif
+
 Node* SearchThread::get_new_child_to_evaluate(size_t& childIdx, NodeDescription& description)
 {
     description.depth = 0;
@@ -173,8 +202,13 @@ Node* SearchThread::get_new_child_to_evaluate(size_t& childIdx, NodeDescription&
         if (nextNode == nullptr) {
             const bool inCheck = newState->gives_check(currentNode->get_action(childIdx));
             newState->do_action(currentNode->get_action(childIdx));
-            currentNode->increment_no_visit_idx();
+            currentNode->increment_no_visit_idx();          
             description.type = add_new_node_to_tree(newState.get(), currentNode, childIdx, inCheck);
+
+#ifdef MPV_MCTS
+            addNodeToLargeNetQueue(currentNode);
+#endif
+
             currentNode->unlock();
 
             if (description.type == NODE_NEW_NODE) {
@@ -231,7 +265,7 @@ void SearchThread::reset_stats()
 {
     tbHits = 0;
     depthMax = 0;
-    depthSum = 0;
+    depthSum = 0; 
 }
 
 void fill_nn_results(size_t batchIdx, bool is_policy_map, const float* valueOutputs, const float* probOutputs, Node *node, size_t& tbHits, SideToMove sideToMove, const SearchSettings* searchSettings)
