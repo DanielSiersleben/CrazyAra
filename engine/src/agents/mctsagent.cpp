@@ -35,7 +35,6 @@
 #include "../util/communication.h"
 #include "util/gcthread.h"
 
-
 MCTSAgent::MCTSAgent(NeuralNetAPI *netSingle, vector<unique_ptr<NeuralNetAPI>>& netBatches,
                      SearchSettings* searchSettings, PlaySettings* playSettings):
     Agent(netSingle, playSettings, true),
@@ -53,10 +52,16 @@ MCTSAgent::MCTSAgent(NeuralNetAPI *netSingle, vector<unique_ptr<NeuralNetAPI>>& 
     gcThread()
 {
     mapWithMutex.hashTable.reserve(1e6);
-
+#ifdef MPV_MCTS
+    this->largeNetNodeQueue = MPVNodeQueue(searchSettings->batchSize, &nodeQueueMutex);
+    for (auto i = 0; i < searchSettings->threads; ++i) {
+        searchThreads.emplace_back(new SearchThread(netBatches[i].get(), searchSettings, &mapWithMutex, &largeNetNodeQueue));
+    }
+#else
     for (auto i = 0; i < searchSettings->threads; ++i) {
         searchThreads.emplace_back(new SearchThread(netBatches[i].get(), searchSettings, &mapWithMutex));
     }
+#endif
     timeManager = make_unique<TimeManager>(searchSettings->randomMoveFactor);
     generator = default_random_engine(r());
 }
@@ -255,6 +260,10 @@ void MCTSAgent::evaluate_board_state()
 {
     evalInfo->nodesPreSearch = init_root_node(state);
 
+#ifdef MPV_MCTS
+    largeNetNodeQueue.clear();
+#endif
+
     thread tGCThread = thread(run_gc_thread<Node>, &gcThread);
     evalInfo->isChess960 = state->is_chess960();
     rootState = state;
@@ -287,11 +296,27 @@ void MCTSAgent::evaluate_board_state()
 
 void MCTSAgent::run_mcts_search()
 {
-    thread** threads = new thread*[searchSettings->threads];
+    int totalThreads;
+#ifdef MPV_MCTS
+    totalThreads = searchSettings->threads + searchSettings->mpvThreads;
+#else
+    totalThreads = searchSettings->threads;
+#endif
+    thread** threads = new thread*[totalThreads];
+
+    // this loop currently only works for 1 additional thread
+    for (size_t i = searchSettings->threads; i < totalThreads; ++i){
+        searchThreads[i]->set_root_node(rootNode);
+        searchThreads[i]->set_root_state(rootState);
+        searchThreads[i]->set_search_limits(searchLimits);
+        threads[i] = new thread(run_search_thread, searchThreads[i]);
+    }
+
     for (size_t i = 0; i < searchSettings->threads; ++i) {
         searchThreads[i]->set_root_node(rootNode);
         searchThreads[i]->set_root_state(rootState);
         searchThreads[i]->set_search_limits(searchLimits);
+        //searchThreads[i]->setLargeNetInputPlanes(largeNetInputPlanes);
         threads[i] = new thread(run_search_thread, searchThreads[i]);
     }
     int curMovetime = timeManager->get_time_for_move(searchLimits, rootState->side_to_move(), rootNode->plies_from_null()/2);
@@ -301,7 +326,7 @@ void MCTSAgent::run_mcts_search()
     unique_ptr<thread> tManager = make_unique<thread>(run_thread_manager, threadManager.get());
     isRunning = true;
 
-    for (size_t i = 0; i < searchSettings->threads; ++i) {
+    for (size_t i = 0; i < totalThreads; ++i) {
         threads[i]->join();
     }
     threadManager->kill();
@@ -337,30 +362,40 @@ void print_child_nodes_to_file(const Node* parentNode, StateObj* state, size_t p
     for (Node* node : parentNode->get_child_nodes()) {
         if (node != nullptr) {
             Action action = parentNode->get_action(childIdx);
-            outFile << "N" << ++nodeId << " [label = \""
-                    <<  state->action_to_san(action, state->legal_actions(), false, false)
-                     << "\"]" << endl;
-            int perc = (float(parentNode->get_child_number_visits()[childIdx++]) / parentNode->get_visits()) * 100 + 0.5;
-            perc = min(perc+10, 100);
-            outFile << "N" << parentId << " -> " << "N" << nodeId
-                    << " [color = gray" << 100-perc << "]"
-                    <<   ";" << endl;
-        }
-    }
-    outFile  << "{ rank=same; ";
-    for (size_t idx = initialId+1; idx < initialId+parentNode->get_no_visit_idx(); ++idx) {
-        outFile << "N" << idx << " ";
-    }
-    outFile << "}" << endl;
-    for (Node* node : parentNode->get_child_nodes()) {
-        if (node != nullptr && node->is_playout_node()) {
-            unique_ptr<StateObj> state2 = unique_ptr<StateObj>(state->clone());
-            Action action = parentNode->get_action(childIdx);
-            state2->do_action(action);
-            print_child_nodes_to_file(node, state2.get(), ++initialId, nodeId, outFile, depth+1, maxDepth);
-        }
-    }
-}
+             outFile << "N" << ++nodeId << " [label = \""
+                     <<  state->action_to_san(action, state->legal_actions(), false, false)
+                     <<  "\"";
+  #ifdef MPV_MCTS
+              if(node->has_large_nn_results()){
+                  outFile << ", shape = doublecircle";
+              }
+  #endif
+
+                  outFile << "]" << endl;
+
+             int perc = (float(parentNode->get_child_number_visits()[childIdx++]) / parentNode->get_visits()) * 100 + 0.5;
+             perc = min(perc+10, 100);
+             outFile << "N" << parentId << " -> " << "N" << nodeId;
+             outFile << " [color = gray" << 100-perc
+                     <<   "];" << endl;
+         }
+     }
+     outFile  << "{ rank=same; ";
+     for (size_t idx = initialId+1; idx < initialId+parentNode->get_no_visit_idx(); ++idx) {
+         outFile << "N" << idx << " ";
+     }
+     outFile << "}" << endl;
+     childIdx = 0;
+     for (Node* node : parentNode->get_child_nodes()) {
+         if (node != nullptr && node->is_playout_node()) {
+             unique_ptr<StateObj> state2 = unique_ptr<StateObj>(state->clone());
+             Action action = parentNode->get_action(childIdx);
+             state2->do_action(action);
+             print_child_nodes_to_file(node, state2.get(), ++initialId, nodeId, outFile, depth+1, maxDepth);
+         }
+         childIdx++;
+     }
+ }
 
 void MCTSAgent::export_search_tree(size_t maxDepth, const string& filename)
 {
@@ -384,7 +419,11 @@ void MCTSAgent::export_search_tree(size_t maxDepth, const string& filename)
             << "color = grey" << endl
             << "]" << endl << endl;
 
-    outFile << "N0 [label = \"root\", xlabel=\"fen: " << rootState->fen() << "\"]" << endl << endl;
+    outFile << "N0 [label = \"root\","
+           #ifdef MPV_MCTS
+            << "shape = doublecircle,"
+            #endif
+            << " xlabel=\"fen: " << rootState->fen() << "\"]" << endl << endl;
     print_child_nodes_to_file(rootNode, rootState, 0, nodeId, outFile, 1, maxDepth);
     outFile << "}" << endl;
     outFile.close();

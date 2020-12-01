@@ -45,6 +45,8 @@
 #include "BatchStream.h"
 
 using namespace std;
+using namespace sample;
+
 
 enum Precision {
     float32,

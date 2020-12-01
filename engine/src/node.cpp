@@ -83,6 +83,10 @@ double Node::get_q_sum_for_parent(const ParentNode &parent, float virtualLoss) c
 }
 
 Node::Node(StateObj* state, bool inCheck, const SearchSettings* searchSettings):
+#ifdef MPV_MCTS
+    hasLargeNNResults(false),
+    enqueued(false),
+#endif
     legalActions(state->legal_actions()),
     key(state->hash_key()),
     valueSum(0),
@@ -382,6 +386,13 @@ bool Node::has_nn_results() const
 {
     return hasNNResults;
 }
+
+#ifdef MPV_MCTS
+bool Node::has_large_nn_results() const
+{
+    return hasLargeNNResults;
+}
+#endif
 
 template<bool increment>
 void Node::update_virtual_loss_counter(uint16_t childIdx)
@@ -975,6 +986,20 @@ size_t Node::select_child_node(const SearchSettings* searchSettings)
     // it's not worth to save the u values as a node attribute because u is updated every time n_sum changes
     return argmax(d->qValues + get_current_u_values(searchSettings));
 }
+#ifdef MPV_MCTS
+bool Node::evaluatedByLargeNet(){
+    return enqueued || hasLargeNNResults;
+}
+void Node::enable_has_large_nn_results(){
+    this->hasLargeNNResults = true;
+}
+void Node::enable_node_is_enqueued(){
+    this->enqueued = true;
+}
+void Node::disable_node_is_enqueued(){
+    this->enqueued = false;
+}
+#endif
 
 const char* node_type_to_string(enum NodeType nodeType)
 {

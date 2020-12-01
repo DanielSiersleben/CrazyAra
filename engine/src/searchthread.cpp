@@ -40,10 +40,13 @@ size_t SearchThread::get_max_depth() const
     return depthMax;
 }
 
-SearchThread::SearchThread(NeuralNetAPI *netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex):
+#ifdef MPV_MCTS
+SearchThread::SearchThread(NeuralNetAPI *netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex, MPVNodeQueue *nodeQueue):
     NeuralNetAPIUser(netBatch),
     isRunning(false), mapWithMutex(mapWithMutex), searchSettings(searchSettings)
 {
+    this->nodeQueue = nodeQueue;
+
     searchLimits = nullptr;  // will be set by set_search_limits() every time before go()
 
     newNodes = make_unique<FixedVector<Node*>>(searchSettings->batchSize);
@@ -53,6 +56,21 @@ SearchThread::SearchThread(NeuralNetAPI *netBatch, SearchSettings* searchSetting
     trajectoryBuffer.reserve(DEPTH_INIT);
     actionsBuffer.reserve(DEPTH_INIT);
 }
+#else
+SearchThread::SearchThread(NeuralNetAPI *netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex):
+    NeuralNetAPIUser(netBatch),
+    isRunning(false), mapWithMutex(mapWithM
+    searchLimits = nullptr;  // will be set by set_search_limits() every time before go()
+
+    newNodes = make_unique<FixedVector<Nodeutex), searchSettings(searchSettings)
+    {*>>(searchSettings->batchSize);
+    newNodeSideToMove = make_unique<FixedVector<SideToMove>>(searchSettings->batchSize);
+    transpositionValues = make_unique<FixedVector<float>>(searchSettings->batchSize*2);
+
+    trajectoryBuffer.reserve(DEPTH_INIT);
+    actionsBuffer.reserve(DEPTH_INIT);
+}
+#endif
 
 void SearchThread::set_root_node(Node *value)
 {
@@ -167,6 +185,19 @@ Node* SearchThread::get_new_child_to_evaluate(size_t& childIdx, NodeDescription&
         }
         currentNode->apply_virtual_loss_to_child(childIdx, searchSettings->virtualLoss);
         trajectoryBuffer.emplace_back(NodeAndIdx(currentNode, childIdx));
+
+#ifdef MPV_MCTS
+        if(currentNode->get_real_visits() >= searchSettings->largeNetEvalThreshold && !currentNode->evaluatedByLargeNet() && nodeQueue->batchIdx < searchSettings->batchSize)
+        {
+            //cout << "hier:" << nodeQueue->batchIdx << endl;
+            //if(*batchIdxLargeNet > 16) cout << "error" << endl;
+            nodeQueue->mtx->lock();
+            newState->get_state_planes(true, nodeQueue->inputPlanes+(nodeQueue->batchIdx)*StateConstants::NB_VALUES_TOTAL());
+            nodeQueue->emplace_back(currentNode, newState->side_to_move());
+            nodeQueue->mtx->unlock();
+            currentNode->enable_node_is_enqueued();
+        }
+#endif
 
         Node* nextNode = currentNode->get_child_node(childIdx);
         description.depth++;

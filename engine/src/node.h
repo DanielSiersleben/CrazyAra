@@ -90,6 +90,12 @@ private:
     bool hasNNResults;
     bool sorted;
 
+#ifdef MPV_MCTS
+    bool enqueued;
+    bool hasLargeNNResults;
+#endif
+
+
 public:
     /**
      * @brief Node Primary constructor which is used when expanding a node during search
@@ -158,6 +164,9 @@ public:
 
     vector<Node*> get_child_nodes() const;
     bool is_terminal() const;
+#ifdef MPV_MCTS
+    bool has_large_nn_results() const;
+#endif
     bool has_nn_results() const;
     float get_value() const;
     double get_value_sum() const;
@@ -332,6 +341,13 @@ public:
 
     DynamicVector<uint32_t> get_child_number_visits() const;
     uint32_t get_child_number_visits(uint16_t childIdx) const;
+
+#ifdef MPV_MCTS
+    bool evaluatedByLargeNet();
+    void enable_has_large_nn_results();
+    void enable_node_is_enqueued();
+    void disable_node_is_enqueued();
+#endif
 
     void enable_has_nn_results();
     uint16_t plies_from_null() const;

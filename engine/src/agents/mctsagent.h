@@ -46,12 +46,15 @@
 #include "../manager/threadmanager.h"
 #include "util/gcthread.h"
 
+#ifdef MPV_MCTS
+#include "mpvnodequeue.h"
+#endif
 
 using namespace crazyara;
 
 class MCTSAgent : public Agent
 {
-private:
+protected:
     SearchSettings* searchSettings;
     vector<SearchThread*> searchThreads;
     unique_ptr<TimeManager> timeManager;
@@ -82,6 +85,11 @@ private:
 
     unique_ptr<ThreadManager> threadManager;
     GCThread<Node> gcThread;
+
+#ifdef MPV_MCTS
+    mutex nodeQueueMutex;
+    MPVNodeQueue largeNetNodeQueue;
+#endif
 
 public:
     MCTSAgent(NeuralNetAPI* netSingle,

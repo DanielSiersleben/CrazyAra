@@ -35,6 +35,10 @@
 #include "util/fixedvector.h"
 #include "nn/neuralnetapiuser.h"
 
+#ifdef MPV_MCTS
+#include "mpvnodequeue.h"
+#endif
+
 
 // wrapper for unordered_map with a mutex for thread safe access
 struct MapWithMutex {
@@ -59,9 +63,9 @@ struct NodeDescription
     size_t depth;
 };
 
-class SearchThread : NeuralNetAPIUser
+class SearchThread : public NeuralNetAPIUser
 {
-private:
+protected:
     Node* rootNode;
     StateObj* rootState;
     unique_ptr<StateObj> newState;
@@ -87,6 +91,12 @@ private:
     size_t depthSum;
     size_t depthMax;
     size_t visitsPreSearch;
+
+#ifdef MPV_MCTS
+    float* largeNetInputPlanes;
+    MPVNodeQueue *nodeQueue;
+#endif
+
 public:
     /**
      * @brief SearchThread
@@ -94,7 +104,11 @@ public:
      * @param searchSettings Given settings for this search run
      * @param MapWithMutex Handle to the hash table
      */
+#ifdef MPV_MCTS
+    SearchThread(NeuralNetAPI* netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex, MPVNodeQueue *nodeQueue);
+#else
     SearchThread(NeuralNetAPI* netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex);
+#endif
 
     /**
      * @brief create_mini_batch Creates a mini-batch of new unexplored nodes.
@@ -102,12 +116,12 @@ public:
      * If the node was found in the hash-table it's value is backpropagated without requesting the NN.
      * If a collision occurs (the same node was selected multiple times), it will be added to the collisionNodes vector
      */
-    void create_mini_batch();
+    virtual void create_mini_batch();
 
     /**
      * @brief thread_iteration Runs multiple mcts-rollouts as long as a new batch is filled
      */
-    void thread_iteration();
+    virtual void thread_iteration();
 
     /**
      * @brief nodes_limits_ok Checks if the searchLimits based on the amount of nodes to search has been reached.
@@ -148,7 +162,7 @@ public:
     /**
      * @brief reset_tb_hits Sets the number of table hits to 0
      */
-    void reset_stats();
+    virtual void reset_stats();
 
     void set_root_state(StateObj* value);
     size_t get_tb_hits() const;
@@ -160,10 +174,13 @@ public:
     float get_transposition_q_value(uint32_t transposVisits, double transposQsum, uint32_t masterVisits, double masterQsum);
 
 private:
+#ifdef MPV_MCTS
+    void addNodeToLargeNetQueue(Node* node, unique_ptr<StateObj> state);
+#endif
     /**
      * @brief set_nn_results_to_child_nodes Sets the neural network value evaluation and policy prediction vector for every newly expanded nodes
      */
-    void set_nn_results_to_child_nodes();
+    virtual void set_nn_results_to_child_nodes();
 
     /**
      * @brief backup_value_outputs Backpropagates all newly received value evaluations from the neural network accross the visited search paths

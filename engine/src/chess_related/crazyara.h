@@ -42,6 +42,9 @@
 #include "rl/selfplay.h"
 #include "agents/config/rlsettings.h"
 #endif
+#ifdef MPV_MCTS
+#include "agents/mpvmctsagent.h"
+#endif
 
 using namespace crazyara;
 
@@ -72,6 +75,9 @@ private:
     unique_ptr<MCTSAgent> mctsAgent;
     unique_ptr<NeuralNetAPI> netSingle;
     vector<unique_ptr<NeuralNetAPI>> netBatches;
+#ifdef MPV_MCTS
+    vector<unique_ptr<NeuralNetAPI>> mpvNetBatches;
+#endif
 #ifdef USE_RL
     unique_ptr<NeuralNetAPI> netSingleContender;
     unique_ptr<MCTSAgent> mctsAgentContender;
@@ -208,6 +214,11 @@ private:
      * @return string
      */
     string engine_info();
+
+#ifdef MPV_MCTS
+    vector<unique_ptr<NeuralNetAPI>> CrazyAra::create_new_mpvnet_batches(const string& modelDirectory);
+    unique_ptr<MCTSAgent> create_new_mpvmcts_agent(NeuralNetAPI* smallNetSingle, vector<unique_ptr<NeuralNetAPI>>& netBatches, vector<unique_ptr<NeuralNetAPI>>& mpvNetBatches);
+#endif
 
     /**
      * @brief create_new_mcts_agent Factory method to create a new MCTSAgent when loading new neural network weights
