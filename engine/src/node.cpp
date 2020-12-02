@@ -534,6 +534,47 @@ void backup_value(float value, float virtualLoss, const Trajectory& trajectory) 
     }
 }
 
+#ifdef MPV_MCTS
+void backup_mpv_value(float value, float virtualLoss, const Trajectory& trajectory, size_t valueFactor){
+    for (auto it = trajectory.rbegin(); it != trajectory.rend(); ++it) {
+#ifndef MODE_POMMERMAN
+        value = -value;
+#endif
+        it->node->update_value_mpv(it->childIdx, value, virtualLoss, valueFactor);
+    }
+}
+
+void Node::update_value_mpv(size_t childIdx, float value, float virtualLoss, int valueFactor)
+{
+    lock();
+
+    valueSum += (value * valueFactor);
+    realVisitsSum += valueFactor;
+
+    if (d->childNumberVisits[childIdx] == virtualLoss) {
+        // set new Q-value based on return
+        // (the initialization of the Q-value was by Q_INIT which we don't want to recover.)
+        d->qValues[childIdx] = value;
+    }
+    else {
+        // revert virtual loss and update the Q-value
+        assert(d->childNumberVisits[childIdx] != 0);
+        d->qValues[childIdx] = (double(d->qValues[childIdx]) * d->childNumberVisits[childIdx] + virtualLoss + (value*valueFactor)) / (d->childNumberVisits[childIdx] + valueFactor);
+        assert(!isnan(d->qValues[childIdx]));
+    }
+
+    if (virtualLoss != 1) {
+        d->childNumberVisits[childIdx] -= size_t(virtualLoss) - valueFactor;
+        d->visitSum -= size_t(virtualLoss) - valueFactor;
+    }
+    if (is_terminal_value(value)) {
+        ++d->terminalVisits;
+        solve_for_terminal(childIdx);
+    }
+    unlock();
+}
+#endif
+
 void Node::revert_virtual_loss_and_update(size_t childIdx, float value, float virtualLoss)
 {
     lock();

@@ -185,7 +185,7 @@ private:
     /**
      * @brief backup_value_outputs Backpropagates all newly received value evaluations from the neural network accross the visited search paths
      */
-    void backup_value_outputs();
+    virtual void backup_value_outputs();
 
     /**
      * @brief backup_collisions Reverts the applied virtual loss for all rollouts which ended in a collision event

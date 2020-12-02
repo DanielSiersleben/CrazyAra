@@ -135,6 +135,10 @@ public:
      */
     void revert_virtual_loss_and_update(size_t childIdx, float valueSum, float virtualLoss);
 
+#ifdef MPV_MCTS
+    void update_value_mpv(size_t childIdx, float valueSum, float virtualLoss, int valueFactor);
+#endif
+
     /**
      * @brief revert_virtual_loss Reverts the virtual loss for a target node
      * @param childIdx Index to the child node to update
@@ -663,4 +667,7 @@ void backup_collision(float virtualLoss, const Trajectory& trajectory);
  */
 void backup_value(float value, float virtualLoss, const Trajectory& trajectory);
 
+#ifdef MPV_MCTS
+void backup_mpv_value(float value, float virtualLoss, const Trajectory& trajectory, size_t valueFactor);
+#endif
 #endif // NODE_H

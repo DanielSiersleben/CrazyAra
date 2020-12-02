@@ -17,6 +17,10 @@ public:
 
     void reset_stats() override;
 
+    void backup_value_outputs() override;
+
+    void backup_mpvnet_values(FixedVector<Node*>* nodes, vector<Trajectory>& trajectories);
+
 private:
     void set_nn_results_to_child_nodes() override;
 };

@@ -184,6 +184,9 @@ void MCTSAgent::create_new_root_node(StateObj* state)
 
 void MCTSAgent::delete_old_tree()
 {
+#ifdef MPV_MCTS
+    largeNetNodeQueue.clear();
+#endif
     // clear all remaining node of the former root node
     delete_subtree_and_hash_entries(rootNode, mapWithMutex.hashTable, gcThread);
     assert(mapWithMutex.hashTable.size() == 0);

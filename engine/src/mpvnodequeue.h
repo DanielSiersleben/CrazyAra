@@ -8,6 +8,7 @@
 struct MPVNodeQueue{
     vector<Node*> queue;
     vector<SideToMove> sideToMove;
+    vector<Trajectory> trajectories;
     int batchIdx;
     mutex* mtx;
     float* inputPlanes;
@@ -15,6 +16,7 @@ struct MPVNodeQueue{
     MPVNodeQueue(size_t batchSize, mutex* mtx){
         queue = vector<Node*>();
         sideToMove = vector<SideToMove>();
+        trajectories = vector<Trajectory>();
         this->mtx = mtx;
         batchIdx = 0;
     }
@@ -32,16 +34,18 @@ struct MPVNodeQueue{
         }
         queue.clear();
         sideToMove.clear();
+        trajectories.clear();
         batchIdx = 0;
         mtx->unlock();
     }
 
-    void emplace_back(Node* node, SideToMove side){
+    void emplace_back(Node* node, SideToMove side, Trajectory trajectory){
         this->queue.emplace_back(node);
         this->sideToMove.emplace_back(side);
+        this->trajectories.emplace_back(trajectory);
         batchIdx++;
     }
-    ~MPVNodeQueue(){}
+
 };
 
 #endif

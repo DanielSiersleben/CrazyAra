@@ -193,7 +193,9 @@ Node* SearchThread::get_new_child_to_evaluate(size_t& childIdx, NodeDescription&
             //if(*batchIdxLargeNet > 16) cout << "error" << endl;
             nodeQueue->mtx->lock();
             newState->get_state_planes(true, nodeQueue->inputPlanes+(nodeQueue->batchIdx)*StateConstants::NB_VALUES_TOTAL());
-            nodeQueue->emplace_back(currentNode, newState->side_to_move());
+            Trajectory tmp;
+            std::copy(trajectoryBuffer.begin(), trajectoryBuffer.end()-1, back_inserter(tmp));
+            nodeQueue->emplace_back(currentNode, newState->side_to_move(), tmp);
             nodeQueue->mtx->unlock();
             currentNode->enable_node_is_enqueued();
         }
