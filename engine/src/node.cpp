@@ -548,29 +548,18 @@ void Node::update_value_mpv(size_t childIdx, float value, float virtualLoss, int
 {
     lock();
 
-    valueSum += (value * valueFactor);
-    realVisitsSum += valueFactor;
+    valueSum = (double(valueSum * realVisitsSum + (value * valueFactor)))/(valueFactor+realVisitsSum);
+    //realVisitsSum += valueFactor;
 
-    if (d->childNumberVisits[childIdx] == virtualLoss) {
-        // set new Q-value based on return
-        // (the initialization of the Q-value was by Q_INIT which we don't want to recover.)
-        d->qValues[childIdx] = value;
-    }
-    else {
         // revert virtual loss and update the Q-value
         assert(d->childNumberVisits[childIdx] != 0);
-        d->qValues[childIdx] = (double(d->qValues[childIdx]) * d->childNumberVisits[childIdx] + virtualLoss + (value*valueFactor)) / (d->childNumberVisits[childIdx] + valueFactor);
+        d->qValues[childIdx] = (double(d->qValues[childIdx]) * d->childNumberVisits[childIdx] + (value * valueFactor)) / (d->childNumberVisits[childIdx] + valueFactor);
         assert(!isnan(d->qValues[childIdx]));
-    }
 
-    if (virtualLoss != 1) {
-        d->childNumberVisits[childIdx] -= size_t(virtualLoss) - valueFactor;
-        d->visitSum -= size_t(virtualLoss) - valueFactor;
-    }
-    if (is_terminal_value(value)) {
-        ++d->terminalVisits;
-        solve_for_terminal(childIdx);
-    }
+       // d->childNumberVisits[childIdx] -= - valueFactor;
+       // d->visitSum -= - valueFactor;
+
+       // d->largeNetBackpropCount += valueFactor;
     unlock();
 }
 #endif

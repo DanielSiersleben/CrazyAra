@@ -59,11 +59,11 @@ SearchThread::SearchThread(NeuralNetAPI *netBatch, SearchSettings* searchSetting
 #else
 SearchThread::SearchThread(NeuralNetAPI *netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex):
     NeuralNetAPIUser(netBatch),
-    isRunning(false), mapWithMutex(mapWithM
+    isRunning(false), mapWithMutex(mapWithMutex), searchSettings(searchSettings)
+{
     searchLimits = nullptr;  // will be set by set_search_limits() every time before go()
 
-    newNodes = make_unique<FixedVector<Nodeutex), searchSettings(searchSettings)
-    {*>>(searchSettings->batchSize);
+    newNodes = make_unique<FixedVector<Node*>>(searchSettings->batchSize);
     newNodeSideToMove = make_unique<FixedVector<SideToMove>>(searchSettings->batchSize);
     transpositionValues = make_unique<FixedVector<float>>(searchSettings->batchSize*2);
 
@@ -187,17 +187,19 @@ Node* SearchThread::get_new_child_to_evaluate(size_t& childIdx, NodeDescription&
         trajectoryBuffer.emplace_back(NodeAndIdx(currentNode, childIdx));
 
 #ifdef MPV_MCTS
-        if(currentNode->get_real_visits() >= searchSettings->largeNetEvalThreshold && !currentNode->evaluatedByLargeNet() && nodeQueue->batchIdx < searchSettings->batchSize)
+        if(currentNode->get_real_visits() >= searchSettings->largeNetEvalThreshold && !currentNode->evaluatedByLargeNet())
         {
-            //cout << "hier:" << nodeQueue->batchIdx << endl;
-            //if(*batchIdxLargeNet > 16) cout << "error" << endl;
-            nodeQueue->mtx->lock();
-            newState->get_state_planes(true, nodeQueue->inputPlanes+(nodeQueue->batchIdx)*StateConstants::NB_VALUES_TOTAL());
-            Trajectory tmp;
-            std::copy(trajectoryBuffer.begin(), trajectoryBuffer.end()-1, back_inserter(tmp));
-            nodeQueue->emplace_back(currentNode, newState->side_to_move(), tmp);
-            nodeQueue->mtx->unlock();
-            currentNode->enable_node_is_enqueued();
+            if(nodeQueue->batchIdx < searchSettings->batchSize){
+                //cout << "hier:" << nodeQueue->batchIdx << endl;
+                //if(*batchIdxLargeNet > 16) cout << "error" << endl;
+                nodeQueue->mtx->lock();
+                newState->get_state_planes(true, nodeQueue->inputPlanes+(nodeQueue->batchIdx)*StateConstants::NB_VALUES_TOTAL());
+                Trajectory tmp;
+                std::copy(trajectoryBuffer.begin(), trajectoryBuffer.end()-1, back_inserter(tmp));
+                nodeQueue->emplace_back(currentNode, newState->side_to_move(), tmp);
+                nodeQueue->mtx->unlock();
+                currentNode->enable_node_is_enqueued();
+            }
         }
 #endif
 

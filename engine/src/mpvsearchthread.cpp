@@ -14,7 +14,7 @@ void MPVSearchThread::reset_stats()
     depthSum = 0;
     nodeQueue->clear();
     // not sure if necessary
-    nodeQueue->inputPlanes = inputPlanes;
+    // nodeQueue->inputPlanes = inputPlanes;
 }
 
 void MPVSearchThread::create_mini_batch()

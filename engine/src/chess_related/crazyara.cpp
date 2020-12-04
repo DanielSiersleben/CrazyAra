@@ -396,10 +396,9 @@ bool CrazyAra::is_ready()
         mpvNetBatches = create_new_mpvnet_batches(Options["Large_Model_Directory"]);
         mctsAgent = create_new_mpvmcts_agent(netSingle.get(), netBatches, mpvNetBatches);
 #else
-        mctsAgent = create_new_mcts_agent(netSingle.get(), netBatches);
         netSingle = create_new_net_single(Options["Model_Directory"]);
         netBatches = create_new_net_batches(Options["Model_Directory"]);
-
+        mctsAgent = create_new_mcts_agent(netSingle.get(), netBatches);
 #endif
         rawAgent = make_unique<RawNetAgent>(netSingle.get(), &playSettings, false);
         StateConstants::init(mctsAgent->is_policy_map());
@@ -442,7 +441,7 @@ vector<unique_ptr<NeuralNetAPI>> CrazyAra::create_new_mpvnet_batches(const strin
 
     for (int deviceId = int(Options["First_Device_ID"]); deviceId <= int(Options["Last_Device_ID"]); ++deviceId) {
         for (size_t i = 0; i < size_t(Options["MPVThreads"]); ++i) {
-            mpvNetBatches.push_back(make_unique<TensorrtAPI>(deviceId, searchSettings.batchSize, modelDirectory, Options["Precision"]));
+            mpvNetBatches.push_back(make_unique<TensorrtAPI>(deviceId, 64, modelDirectory, Options["Precision"]));
         }
     }
     return mpvNetBatches;

@@ -307,6 +307,7 @@ void MCTSAgent::run_mcts_search()
 #endif
     thread** threads = new thread*[totalThreads];
 
+#ifdef MPV_MCTS
     // this loop currently only works for 1 additional thread
     for (size_t i = searchSettings->threads; i < totalThreads; ++i){
         searchThreads[i]->set_root_node(rootNode);
@@ -314,6 +315,7 @@ void MCTSAgent::run_mcts_search()
         searchThreads[i]->set_search_limits(searchLimits);
         threads[i] = new thread(run_search_thread, searchThreads[i]);
     }
+#endif
 
     for (size_t i = 0; i < searchSettings->threads; ++i) {
         searchThreads[i]->set_root_node(rootNode);

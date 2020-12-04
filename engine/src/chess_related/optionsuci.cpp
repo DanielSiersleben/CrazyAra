@@ -54,7 +54,7 @@ void OptionsUCI::init(OptionsMap &o)
 #else
     o["Batch_Size"]                    << Option(16, 1, 8192);
 #endif
-    o["Threads"]                       << Option(2, 1, 512);
+    o["Threads"]                       << Option(3, 1, 512);
 #ifdef MPV_MCTS
     o["MPVThreads"]                       << Option(1, 1, 512);
     o["largeNetThreshold"]                       << Option(1000, 100, 999999);
@@ -99,7 +99,7 @@ void OptionsUCI::init(OptionsMap &o)
     o["Use_Raw_Network"]               << Option(false);
     o["Enhance_Checks"]                << Option(true);
 //    o["Enhance_Captures"]              << Option(false);         currently disabled
-    o["Use_Transposition_Table"]       << Option(true);
+    o["Use_Transposition_Table"]       << Option(false);
 #ifdef TENSORRT
     o["Use_TensorRT"]                  << Option(true);
     o["Precision"]                     << Option("float16", {"float32", "float16", "int8"});
@@ -108,7 +108,7 @@ void OptionsUCI::init(OptionsMap &o)
     o["Small_Model_Directory"]               << Option("model/small_net");
     o["Large_Model_Directory"]               << Option("model/large_net");
 #elif MODE_CRAZYHOUSE
-    o["Model_Directory"]               << Option("model");
+    o["Model_Directory"]               << Option("model/large_net");
 #else
     o["Model_Directory"]               << Option("model");
 #endif
@@ -138,7 +138,7 @@ void OptionsUCI::init(OptionsMap &o)
 #ifdef SUPPORT960
     o["UCI_Chess960"]                  << Option(true);
 #endif
-    o["Random_Playout"]                << Option(true);
+    o["Random_Playout"]                << Option(false);
 }
 
 void OptionsUCI::setoption(istringstream &is)
