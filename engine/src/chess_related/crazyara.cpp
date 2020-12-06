@@ -441,7 +441,7 @@ vector<unique_ptr<NeuralNetAPI>> CrazyAra::create_new_mpvnet_batches(const strin
 
     for (int deviceId = int(Options["First_Device_ID"]); deviceId <= int(Options["Last_Device_ID"]); ++deviceId) {
         for (size_t i = 0; i < size_t(Options["MPVThreads"]); ++i) {
-            mpvNetBatches.push_back(make_unique<TensorrtAPI>(deviceId, 64, modelDirectory, Options["Precision"]));
+            mpvNetBatches.push_back(make_unique<TensorrtAPI>(deviceId, searchSettings.largeNetBatchSize, modelDirectory, Options["Precision"]));
         }
     }
     return mpvNetBatches;
@@ -486,6 +486,7 @@ void CrazyAra::init_search_settings()
     searchSettings.multiPV = Options["MultiPV"];
     searchSettings.threads = Options["Threads"] * get_num_gpus(Options);
 #ifdef MPV_MCTS
+    searchSettings.largeNetBatchSize = Options["largeNetBatchSize"];
     searchSettings.mpvThreads = Options["mpvThreads"] * get_num_gpus(Options);
     searchSettings.largeNetEvalThreshold = Options["largeNetThreshold"];
 #endif

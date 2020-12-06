@@ -548,7 +548,7 @@ void Node::update_value_mpv(size_t childIdx, float value, float virtualLoss, int
 {
     lock();
 
-    valueSum = (double(valueSum * realVisitsSum + (value * valueFactor)))/(valueFactor+realVisitsSum);
+    valueSum = (double(valueSum * (realVisitsSum) + (value * valueFactor * valueFactor))/(realVisitsSum + valueFactor));
     //realVisitsSum += valueFactor;
 
         // revert virtual loss and update the Q-value

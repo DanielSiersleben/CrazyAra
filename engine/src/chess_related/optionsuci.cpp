@@ -58,6 +58,7 @@ void OptionsUCI::init(OptionsMap &o)
 #ifdef MPV_MCTS
     o["MPVThreads"]                       << Option(1, 1, 512);
     o["largeNetThreshold"]                       << Option(1000, 100, 999999);
+    o["largeNetBatchSize"]             << Option(64, 1, 8192);
 #endif
     o["Centi_CPuct_Init"]              << Option(250, 1, 99999);
     o["CPuct_Base"]                    << Option(19652, 1, 99999);

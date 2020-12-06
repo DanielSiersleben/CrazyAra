@@ -5,6 +5,8 @@ MPVSearchThread::MPVSearchThread(NeuralNetAPI* netBatch, SearchSettings* searchS
     SearchThread(netBatch, searchSettings, mapWithMutex, nodeQueue)
 {
      nodeQueue->inputPlanes = inputPlanes;
+     newNodes = make_unique<FixedVector<Node*>>(searchSettings->largeNetBatchSize);
+     newNodeSideToMove = make_unique<FixedVector<SideToMove>>(searchSettings->largeNetBatchSize);
 }
 
 void MPVSearchThread::reset_stats()
@@ -19,11 +21,8 @@ void MPVSearchThread::reset_stats()
 
 void MPVSearchThread::create_mini_batch()
 {
-    if(nodeQueue->batchIdx > searchSettings->batchSize){
-        cout << "error" << endl;
-    }
-   if(nodeQueue->batchIdx == searchSettings->batchSize){
-       for(size_t i = 0; i < searchSettings->batchSize; ++i){
+   if(nodeQueue->batchIdx >= nodeQueue->batchSize){
+       for(size_t i = 0; i < nodeQueue->batchSize; ++i){
            newNodes->add_element(nodeQueue->queue[i]);
            newNodeSideToMove->add_element(nodeQueue->sideToMove[i]);
            newTrajectories.emplace_back(nodeQueue->trajectories[i]);

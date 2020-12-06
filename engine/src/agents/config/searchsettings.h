@@ -37,6 +37,7 @@ struct SearchSettings
 #ifdef MPV_MCTS
     size_t mpvThreads;
     size_t largeNetEvalThreshold;
+    size_t largeNetBatchSize;
 #endif
     unsigned int batchSize;
     float dirichletEpsilon;

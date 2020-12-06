@@ -189,17 +189,23 @@ Node* SearchThread::get_new_child_to_evaluate(size_t& childIdx, NodeDescription&
 #ifdef MPV_MCTS
         if(currentNode->get_real_visits() >= searchSettings->largeNetEvalThreshold && !currentNode->evaluatedByLargeNet())
         {
-            if(nodeQueue->batchIdx < searchSettings->batchSize){
-                //cout << "hier:" << nodeQueue->batchIdx << endl;
-                //if(*batchIdxLargeNet > 16) cout << "error" << endl;
-                nodeQueue->mtx->lock();
-                newState->get_state_planes(true, nodeQueue->inputPlanes+(nodeQueue->batchIdx)*StateConstants::NB_VALUES_TOTAL());
-                Trajectory tmp;
-                std::copy(trajectoryBuffer.begin(), trajectoryBuffer.end()-1, back_inserter(tmp));
-                nodeQueue->emplace_back(currentNode, newState->side_to_move(), tmp);
-                nodeQueue->mtx->unlock();
-                currentNode->enable_node_is_enqueued();
-            }
+            //cout << "hier:" << nodeQueue->batchIdx << endl;
+            //if(*batchIdxLargeNet > 16) cout << "error" << endl;
+            /*nodeQueue->mtx->lock();
+            newState->get_state_planes(true, nodeQueue->inputPlanes+(nodeQueue->batchIdx)*StateConstants::NB_VALUES_TOTAL());
+            Trajectory tmp;
+            std::copy(trajectoryBuffer.begin(), trajectoryBuffer.end()-1, back_inserter(tmp));
+            nodeQueue->emplace_back(currentNode, newState->side_to_move(), tmp);
+            nodeQueue->mtx->unlock();
+            currentNode->enable_node_is_enqueued();*/
+
+            int idx = nodeQueue->fetch_and_increase_Index();
+            newState->get_state_planes(true, nodeQueue->getInputPlanes()+idx*StateConstants::NB_VALUES_TOTAL());
+            Trajectory tmp;
+            std::copy(trajectoryBuffer.begin(), trajectoryBuffer.end()-1, back_inserter(tmp));
+            nodeQueue->insert(currentNode, newState->side_to_move(), tmp, idx);
+            currentNode->enable_node_is_enqueued();
+
         }
 #endif
 
