@@ -59,7 +59,7 @@ void MPVSearchThread::backup_mpvnet_values(FixedVector<Node*>* nodes, vector<Tra
 {
     for(size_t idx = 0; idx < nodes->size(); ++idx){
         const Node* node = nodes->get_element(idx);
-        backup_mpv_value(node->get_value(), searchSettings->virtualLoss, trajectories[idx], searchSettings->largeNetEvalThreshold);
+        backup_mpv_value(node->get_value(), searchSettings->virtualLoss, trajectories[idx], 0.1*searchSettings->largeNetEvalThreshold);
     }
     nodes->reset_idx();
     trajectories.clear();

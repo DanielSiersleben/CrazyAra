@@ -141,7 +141,7 @@ public:
     void revert_virtual_loss_and_update(ChildIdx childIdx, float valueSum, float virtualLoss);
 
 #ifdef MPV_MCTS
-    void update_value_mpv(size_t childIdx, float valueSum, float virtualLoss, int valueFactor);
+    void update_value_mpv(ChildIdx childIdx, float valueSum, float virtualLoss, int valueFactor);
 #endif
 
     /**

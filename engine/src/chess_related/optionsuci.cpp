@@ -140,7 +140,7 @@ void OptionsUCI::init(OptionsMap &o)
 #ifdef SUPPORT960
     o["UCI_Chess960"]                  << Option(true);
 #endif
-    o["Random_Playout"]                << Option(true);
+    o["Random_Playout"]                << Option(false);
     o["Fixed_Movetime"]                << Option(0, 0, 99999999);
     o["Reuse_Tree"]                    << Option(true);
 }

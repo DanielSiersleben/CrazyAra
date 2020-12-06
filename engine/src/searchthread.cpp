@@ -139,7 +139,7 @@ SearchLimits *SearchThread::get_search_limits() const
     return searchLimits;
 }
 
-void random_playout(NodeDescription& description, Node* currentNode, size_t& childIdx)
+void random_playout(NodeDescription& description, Node* currentNode, ChildIdx& childIdx)
 {
     if (currentNode->get_real_visits() % int(pow(RANDOM_MOVE_COUNTER, description.depth + 1)) == 0 && currentNode->is_sorted()) {
         if (currentNode->is_fully_expanded()) {
@@ -181,6 +181,18 @@ Node* SearchThread::get_new_child_to_evaluate(ChildIdx& childIdx, NodeDescriptio
         currentNode->apply_virtual_loss_to_child(childIdx, searchSettings->virtualLoss);
         trajectoryBuffer.emplace_back(NodeAndIdx(currentNode, childIdx));
 
+        Node* nextNode = currentNode->get_child_node(childIdx);
+        description.depth++;
+        if (nextNode == nullptr) {
+#ifdef MCTS_STORE_STATES
+            StateObj* newState = currentNode->get_state()->clone();
+#else
+            newState = unique_ptr<StateObj>(rootState->clone());
+            for (Action action : actionsBuffer) {
+                newState->do_action(action);
+            }
+#endif
+
 #ifdef MPV_MCTS
         if(currentNode->get_real_visits() >= searchSettings->largeNetEvalThreshold && !currentNode->evaluatedByLargeNet())
         {
@@ -204,17 +216,6 @@ Node* SearchThread::get_new_child_to_evaluate(ChildIdx& childIdx, NodeDescriptio
         }
 #endif
 
-        Node* nextNode = currentNode->get_child_node(childIdx);
-        description.depth++;
-        if (nextNode == nullptr) {
-#ifdef MCTS_STORE_STATES
-            StateObj* newState = currentNode->get_state()->clone();
-#else
-            newState = unique_ptr<StateObj>(rootState->clone());
-            for (Action action : actionsBuffer) {
-                newState->do_action(action);
-            }
-#endif
             const bool inCheck = newState->gives_check(currentNode->get_action(childIdx));
             newState->do_action(currentNode->get_action(childIdx));
             currentNode->increment_no_visit_idx();
@@ -344,7 +345,7 @@ void SearchThread::create_mini_batch()
     // select nodes to add to the mini-batch
     Node *parentNode;
     NodeDescription description;
-    size_t childIdx;
+    ChildIdx childIdx;
     size_t numTerminalNodes = 0;
 
     while (!newNodes->is_full() &&

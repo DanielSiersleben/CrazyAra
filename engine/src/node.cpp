@@ -423,7 +423,7 @@ ChildIdx Node::get_best_q_idx() const
 
 vector<ChildIdx> Node::get_q_idx_over_thresh(float qThresh)
 {
-    vector<size_t> indices;
+    vector<ChildIdx> indices;
     for (ChildIdx idx = 0; idx < size(d->qValues); ++idx) {
         if (d->qValues[idx] > qThresh) {
             indices.emplace_back(idx);        }
@@ -542,7 +542,7 @@ void backup_mpv_value(float value, float virtualLoss, const Trajectory& trajecto
     }
 }
 
-void Node::update_value_mpv(size_t childIdx, float value, float virtualLoss, int valueFactor)
+void Node::update_value_mpv(ChildIdx childIdx, float value, float virtualLoss, int valueFactor)
 {
     lock();
 
@@ -652,7 +652,7 @@ void Node::set_value(float value)
     this->valueSum = value * this->realVisitsSum;
 }
 
-void Node::add_new_child_node(Node *newNode, size_t childIdx)
+void Node::add_new_child_node(Node *newNode, ChildIdx childIdx)
 {
     d->childNodes[childIdx] = newNode;
 }
@@ -914,7 +914,7 @@ DynamicVector<float> Node::get_current_u_values(const SearchSettings* searchSett
     return get_current_cput(d->visitSum, searchSettings) * blaze::subvector(policyProbSmall, 0, d->noVisitIdx) * (sqrt(d->visitSum) / (d->childNumberVisits + 1.0));
 }
 
-Node *Node::get_child_node(size_t childIdx)
+Node *Node::get_child_node(ChildIdx childIdx)
 {
     return d->childNodes[childIdx];
 }
@@ -998,7 +998,7 @@ size_t get_best_action_index(const Node *curNode, bool fast, bool qValueWeight)
     return bestMoveIdx;
 }
 
-size_t Node::select_child_node(const SearchSettings* searchSettings)
+ChildIdx Node::select_child_node(const SearchSettings* searchSettings)
 {
     if (!sorted) {
         prepare_node_for_visits();
