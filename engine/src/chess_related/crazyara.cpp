@@ -157,6 +157,8 @@ void CrazyAra::go(StateObj* state, istringstream &is,  EvalInfo& evalInfo) {
     searchLimits.reset();
     searchLimits.moveOverhead = TimePoint(Options["Move_Overhead"]);
     searchLimits.nodes = Options["Nodes"];
+    searchLimits.movetime = Options["Fixed_Movetime"];
+    searchLimits.simulations = Options["Simulations"];
 
     string token;
     bool ponderMode = false;
@@ -521,6 +523,7 @@ void CrazyAra::init_search_settings()
     else {
         searchSettings.useTablebase = true;
     }
+    searchSettings.reuseTree = Options["Reuse_Tree"];
 }
 
 void CrazyAra::init_play_settings()

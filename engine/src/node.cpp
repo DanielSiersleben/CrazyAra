@@ -36,7 +36,7 @@ bool Node::is_sorted() const
     return sorted;
 }
 
-double Node::get_q_sum(uint16_t childIdx, float virtualLoss) const
+double Node::get_q_sum(ChildIdx childIdx, float virtualLoss) const
 {
     return get_child_number_visits(childIdx) * double(get_q_value(childIdx)) + get_virtual_loss_counter(childIdx) * virtualLoss;
 }
@@ -51,7 +51,7 @@ void Node::decrement_number_parents()
     --numberParentNodes;
 }
 
-uint8_t Node::get_virtual_loss_counter(uint16_t childIdx) const
+uint8_t Node::get_virtual_loss_counter(ChildIdx childIdx) const
 {
     return d->virtualLossCounter[childIdx];
 }
@@ -82,6 +82,13 @@ double Node::get_q_sum_for_parent(const ParentNode &parent, float virtualLoss) c
     return parent.node->get_q_sum(parent.childIdxForParent, virtualLoss);
 }
 
+#ifdef MCTS_STORE_STATES
+StateObj* Node::get_state() const
+{
+    return state.get();
+}
+#endif
+
 Node::Node(StateObj* state, bool inCheck, const SearchSettings* searchSettings):
 #ifdef MPV_MCTS
     hasLargeNNResults(false),
@@ -91,6 +98,9 @@ Node::Node(StateObj* state, bool inCheck, const SearchSettings* searchSettings):
     key(state->hash_key()),
     valueSum(0),
     d(nullptr),
+    #ifdef MCTS_STORE_STATES
+    state(state),
+    #endif
     realVisitsSum(0),
     pliesFromNull(state->steps_from_null()),
     numberParentNodes(1),
@@ -212,7 +222,7 @@ void Node::define_end_ply_for_solved_terminal(const Node* childNode)
 }
 
 template <int targetValue>
-void Node::update_solved_terminal(const Node* childNode, uint_fast16_t childIdx)
+void Node::update_solved_terminal(const Node* childNode, ChildIdx childIdx)
 {
     define_end_ply_for_solved_terminal(childNode);
     set_value(targetValue);
@@ -263,7 +273,7 @@ void Node::mcts_policy_based_on_q_n(DynamicVector<float>& mctsPolicy, float qVal
     mctsPolicy = (1.0f - qValueWeight) * normalizedVisits + qValueWeight * qValuePruned;
 }
 
-void Node::solve_for_terminal(uint_fast16_t childIdx)
+void Node::solve_for_terminal(ChildIdx childIdx)
 {
     if (d->nodeType != UNSOLVED) {
         // already solved
@@ -333,43 +343,14 @@ void Node::sort_moves_by_probabilities()
     sorted = true;
 }
 
-Action Node::get_action(size_t childIdx) const
+Action Node::get_action(ChildIdx childIdx) const
 {
     return legalActions[childIdx];
 }
 
-Node *Node::get_child_node(size_t childIdx) const
+Node *Node::get_child_node(ChildIdx childIdx) const
 {
     return d->childNodes[childIdx];
-}
-
-Action Node::get_best_action() const
-{
-    return get_action(get_best_action_index(this, false));
-}
-
-vector<Action> Node::get_ponder_moves() const
-{
-    vector<Action> ponderMoves;
-    const size_t visitThresh = 0.01 * get_visits();
-
-    for (const Node* childNode : get_child_nodes()) {
-        if (childNode == nullptr) {
-            break;
-        }
-        if (childNode->is_playout_node() && childNode->get_visits() > visitThresh) {
-            if (!childNode->is_terminal()) {
-
-                if (ponderMoves.size() == 0) {
-                    ponderMoves.emplace_back(childNode->get_best_action());
-                }
-                else if (find(ponderMoves.begin(), ponderMoves.end(), childNode->get_best_action()) == ponderMoves.end()) {
-                    ponderMoves.emplace_back(childNode->get_best_action());
-                }
-            }
-        }
-    }
-    return ponderMoves;
 }
 
 vector<Node*> Node::get_child_nodes() const
@@ -395,7 +376,7 @@ bool Node::has_large_nn_results() const
 #endif
 
 template<bool increment>
-void Node::update_virtual_loss_counter(uint16_t childIdx)
+void Node::update_virtual_loss_counter(ChildIdx childIdx)
 {
     if (increment) {
         ++d->virtualLossCounter[childIdx];
@@ -406,7 +387,7 @@ void Node::update_virtual_loss_counter(uint16_t childIdx)
     }
 }
 
-void Node::apply_virtual_loss_to_child(size_t childIdx, float virtualLoss)
+void Node::apply_virtual_loss_to_child(ChildIdx childIdx, float virtualLoss)
 {
     // update the stats of the parent node
     // make it look like if one has lost X games from this node forward where X is the virtual loss value
@@ -420,9 +401,9 @@ void Node::apply_virtual_loss_to_child(size_t childIdx, float virtualLoss)
     update_virtual_loss_counter<true>(childIdx);
 }
 
-float Node::get_q_value(size_t idx) const
+float Node::get_q_value(ChildIdx childIdx) const
 {
-    return d->qValues[idx];
+    return d->qValues[childIdx];
 }
 
 DynamicVector<float> Node::get_q_values()
@@ -430,20 +411,20 @@ DynamicVector<float> Node::get_q_values()
     return d->qValues;
 }
 
-void Node::set_q_value(size_t idx, float value)
+void Node::set_q_value(ChildIdx childIdx, float value)
 {
-    d->qValues[idx] = value;
+    d->qValues[childIdx] = value;
 }
 
-size_t Node::get_best_q_idx() const
+ChildIdx Node::get_best_q_idx() const
 {
     return argmax(d->qValues);
 }
 
-vector<size_t> Node::get_q_idx_over_thresh(float qThresh)
+vector<ChildIdx> Node::get_q_idx_over_thresh(float qThresh)
 {
     vector<size_t> indices;
-    for (size_t idx = 0; idx < size(d->qValues); ++idx) {
+    for (ChildIdx idx = 0; idx < size(d->qValues); ++idx) {
         if (d->qValues[idx] > qThresh) {
             indices.emplace_back(idx);        }
     }
@@ -513,6 +494,9 @@ void Node::prepare_node_for_visits()
 {
     sort_moves_by_probabilities();
     init_node_data();
+#ifdef MCTS_STORE_STATES
+    state->prepare_action();
+#endif
 }
 
 uint32_t Node::get_visits() const
@@ -520,17 +504,31 @@ uint32_t Node::get_visits() const
     return d->visitSum;
 }
 
-uint32_t Node::get_real_visits(uint16_t childIdx) const
+uint32_t Node::get_real_visits(ChildIdx childIdx) const
 {
     return d->childNumberVisits[childIdx] - d->virtualLossCounter[childIdx];
 }
 
 void backup_value(float value, float virtualLoss, const Trajectory& trajectory) {
+    double targetQValue = 0;
     for (auto it = trajectory.rbegin(); it != trajectory.rend(); ++it) {
+        if (targetQValue != 0) {
+            const uint_fast32_t transposVisits = it->node->get_real_visits(it->childIdx);
+            if (transposVisits != 0) {
+                const double transposQValue = -it->node->get_q_sum(it->childIdx, virtualLoss) / transposVisits;
+                value = get_transposition_q_value(transposVisits, transposQValue, targetQValue);
+            }
+        }
 #ifndef MODE_POMMERMAN
         value = -value;
 #endif
         it->node->revert_virtual_loss_and_update(it->childIdx, value, virtualLoss);
+        if (it->node->is_transposition()) {
+            targetQValue = it->node->get_value();
+        }
+        else {
+            targetQValue = 0;
+        }
     }
 }
 
@@ -564,7 +562,7 @@ void Node::update_value_mpv(size_t childIdx, float value, float virtualLoss, int
 }
 #endif
 
-void Node::revert_virtual_loss_and_update(size_t childIdx, float value, float virtualLoss)
+void Node::revert_virtual_loss_and_update(ChildIdx childIdx, float value, float virtualLoss)
 {
     lock();
     // decrement virtual loss counter
@@ -602,7 +600,7 @@ void backup_collision(float virtualLoss, const Trajectory& trajectory) {
     }
 }
 
-void Node::revert_virtual_loss(size_t childIdx, float virtualLoss)
+void Node::revert_virtual_loss(ChildIdx childIdx, float virtualLoss)
 {
     lock();
     d->qValues[childIdx] = (double(d->qValues[childIdx]) * d->childNumberVisits[childIdx] + virtualLoss) / (d->childNumberVisits[childIdx] - virtualLoss);
@@ -669,12 +667,12 @@ float Node::max_policy_prob()
     return max(policyProbSmall);
 }
 
-size_t Node::max_q_child()
+ChildIdx Node::max_q_child()
 {
     return argmax(d->qValues);
 }
 
-size_t Node::max_visits_child()
+ChildIdx Node::max_visits_child()
 {
     return argmax(d->childNumberVisits);
 }
@@ -714,7 +712,7 @@ DynamicVector<uint32_t> Node::get_child_number_visits() const
     return d->childNumberVisits;
 }
 
-uint32_t Node::get_child_number_visits(uint16_t childIdx) const
+uint32_t Node::get_child_number_visits(ChildIdx childIdx) const
 {
     return d->childNumberVisits[childIdx];
 }
@@ -934,6 +932,7 @@ void Node::get_mcts_policy(DynamicVector<float>& mctsPolicy, size_t& bestMoveIdx
         float firstMax;
         float secondMax;
         mctsPolicy = d->childNumberVisits;
+        prune_losses_in_mcts_policy(mctsPolicy);
         first_and_second_max(mctsPolicy, d->noVisitIdx, firstMax, secondMax, bestMoveIdx, secondArg);
         if (d->qValues[secondArg]-Q_VALUE_DIFF > d->qValues[bestMoveIdx]) {
             mctsPolicy[bestMoveIdx] = secondMax;
@@ -955,23 +954,24 @@ void Node::get_mcts_policy(DynamicVector<float>& mctsPolicy, size_t& bestMoveIdx
     }
     else {
         mctsPolicy = d->childNumberVisits;
+        prune_losses_in_mcts_policy(mctsPolicy);
         bestMoveIdx = argmax(d->childNumberVisits);
     }
 
     mctsPolicy /= sum(mctsPolicy);
 }
 
-void Node::get_principal_variation(vector<Action>& pv) const
+void Node::get_principal_variation(vector<Action>& pv, bool qValueWeight) const
 {
     const Node* curNode = this;
     while (curNode != nullptr && curNode->is_playout_node() && !curNode->is_terminal()) {
-        size_t childIdx = get_best_action_index(curNode, true);
+        size_t childIdx = get_best_action_index(curNode, true, qValueWeight);
         pv.push_back(curNode->get_action(childIdx));
         curNode = curNode->d->childNodes[childIdx];
     }
 }
 
-size_t get_best_action_index(const Node *curNode, bool fast)
+size_t get_best_action_index(const Node *curNode, bool fast, bool qValueWeight)
 {
     if (curNode->get_checkmate_idx() != NO_CHECKMATE) {
         // chose mating line
@@ -994,7 +994,7 @@ size_t get_best_action_index(const Node *curNode, bool fast)
     }
     DynamicVector<float> mctsPolicy(curNode->get_number_child_nodes());
     size_t bestMoveIdx;
-    curNode->get_mcts_policy(mctsPolicy, bestMoveIdx);
+    curNode->get_mcts_policy(mctsPolicy, bestMoveIdx, qValueWeight);
     return bestMoveIdx;
 }
 
@@ -1162,10 +1162,10 @@ uint32_t Node::get_nodes()
 
 bool Node::is_transposition_return(double myQvalue) const
 {
-    return abs(myQvalue - get_value()) > 0.1;
+    return abs(myQvalue - get_value()) > Q_TRANSPOS_DIFF;
 }
 
-void Node::set_checkmate_idx(uint_fast16_t childIdx) const
+void Node::set_checkmate_idx(ChildIdx childIdx) const
 {
     d->checkmateIdx = childIdx;
 }
@@ -1189,3 +1189,9 @@ size_t get_node_count(const Node *node)
 {
     return node->get_visits() - node->get_terminal_visits();
 }
+
+float get_transposition_q_value(uint_fast32_t transposVisits, double transposQValue, double targetQValue)
+{
+    return clamp(transposVisits * (targetQValue - transposQValue) + targetQValue, -0.99, +0.99);
+}
+
