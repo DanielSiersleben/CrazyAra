@@ -30,7 +30,9 @@ SearchSettings::SearchSettings():
         mpvThreads(1),
         largeNetEvalThreshold(1000),
         largeNetBatchSize(64),
+        largeNetBackpropThreads(1),
     #endif
+        backpropThreads(1),
         threads(2),
         batchSize(2),
         dirichletEpsilon(0.25f),

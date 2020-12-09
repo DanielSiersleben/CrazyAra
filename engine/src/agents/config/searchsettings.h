@@ -34,7 +34,9 @@ struct SearchSettings
 {
     unsigned int multiPV;
     size_t threads;
+    size_t backpropThreads;
 #ifdef MPV_MCTS
+    size_t largeNetBackpropThreads;
     size_t mpvThreads;
     size_t largeNetEvalThreshold;
     size_t largeNetBatchSize;

@@ -92,6 +92,8 @@ protected:
     size_t depthMax;
     size_t visitsPreSearch;
 
+    thread** workerThreads;
+
 #ifdef MPV_MCTS
     float* largeNetInputPlanes;
     MPVNodeQueue *nodeQueue;
@@ -147,7 +149,7 @@ public:
     SearchLimits *get_search_limits() const;
     void set_root_node(Node *value);
     bool is_running() const;
-    void set_is_running(bool value);
+    virtual void set_is_running(bool value);
 
     /**
      * @brief add_new_node_to_tree Adds a new node to the search by either creating a new node or duplicating an exisiting node in case of transposition usage
@@ -163,6 +165,10 @@ public:
      * @brief reset_tb_hits Sets the number of table hits to 0
      */
     virtual void reset_stats();
+
+    void run_worker_backprop();
+
+    void deleteWorkerThreads();
 
     void set_root_state(StateObj* value);
     size_t get_tb_hits() const;
@@ -202,6 +208,8 @@ private:
      */
     Node* get_new_child_to_evaluate(ChildIdx& childIdx, NodeDescription& description);
 
+    Node* get_new_child_to_evaluate(ChildIdx& childIdx, NodeDescription& description, Trajectory* trajectoryBuffer, vector<Action>* actionsBuffer, mutex* mtx);
+
     void backup_values(FixedVector<Node*>* nodes, vector<Trajectory>& trajectories);
     void backup_values(FixedVector<float>* values, vector<Trajectory>& trajectories);
 
@@ -229,4 +237,6 @@ bool is_transposition_verified(const unordered_map<Key,Node*>::const_iterator& i
  */
 inline void random_playout(NodeDescription& description, Node* currentNode, ChildIdx& childIdx);
 
+// for multithreaded backprop
+void backup_values_worker(FixedVector<Node*>* nodes, vector<Trajectory>* trajectories, atomic_size_t* idx, float virtualLoss);
 #endif // SEARCHTHREAD_H

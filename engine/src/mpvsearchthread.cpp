@@ -1,12 +1,15 @@
 #include "mpvsearchthread.h"
+#include <thread>
+
 #ifdef MPV_MCTS
 
 MPVSearchThread::MPVSearchThread(NeuralNetAPI* netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex, MPVNodeQueue *nodeQueue):
     SearchThread(netBatch, searchSettings, mapWithMutex, nodeQueue)
 {
-     nodeQueue->inputPlanes = inputPlanes;
+     nodeQueue->setInputPlanes(inputPlanes);
      newNodes = make_unique<FixedVector<Node*>>(searchSettings->largeNetBatchSize);
      newNodeSideToMove = make_unique<FixedVector<SideToMove>>(searchSettings->largeNetBatchSize);
+
 }
 
 void MPVSearchThread::reset_stats()
@@ -15,13 +18,15 @@ void MPVSearchThread::reset_stats()
     depthMax = 0;
     depthSum = 0;
     nodeQueue->clear();
+    this->workerThreads = new thread*[searchSettings->largeNetBackpropThreads];
+
     // not sure if necessary
     // nodeQueue->inputPlanes = inputPlanes;
 }
 
 void MPVSearchThread::create_mini_batch()
 {
-   if(nodeQueue->batchIdx >= nodeQueue->batchSize){
+   if(nodeQueue->batchIdx->load() >= nodeQueue->batchSize){
        for(size_t i = 0; i < nodeQueue->batchSize; ++i){
            newNodes->add_element(nodeQueue->queue[i]);
            newNodeSideToMove->add_element(nodeQueue->sideToMove[i]);
@@ -55,20 +60,37 @@ void MPVSearchThread::thread_iteration()
 
 }
 
-void MPVSearchThread::backup_mpvnet_values(FixedVector<Node*>* nodes, vector<Trajectory>& trajectories)
+void backup_mpvnet_values(FixedVector<Node*>* nodes, vector<Trajectory>* trajectories, atomic_int* idx, SearchSettings* searchSettings)
 {
-    for(size_t idx = 0; idx < nodes->size(); ++idx){
+    int i;
+    while((i = idx->fetch_add(1)) < nodes->size()){
+        const Node* node = nodes->get_element(i);
+        backup_mpv_value(node->get_value(), trajectories->operator[](i), searchSettings->largeNetEvalThreshold);
+    }
+
+    /*for(size_t idx = 0; idx < nodes->size(); ++idx){
         const Node* node = nodes->get_element(idx);
         backup_mpv_value(node->get_value(), searchSettings->virtualLoss, trajectories[idx], 0.1*searchSettings->largeNetEvalThreshold);
     }
     nodes->reset_idx();
-    trajectories.clear();
+    trajectories.clear();*/
 }
 
 void MPVSearchThread::backup_value_outputs()
 {
-    backup_mpvnet_values(newNodes.get(), newTrajectories);
+    atomic_int idx = -1;
+    for(auto i = 0; i < searchSettings->largeNetBackpropThreads; ++i){
+        workerThreads[i] = new thread(backup_mpvnet_values, newNodes.get(), &newTrajectories, &idx, searchSettings);
+    }
+
+    for(auto i = 0; i < searchSettings->largeNetBackpropThreads; ++i){
+        workerThreads[i]->join();
+    }
+
+    newNodes->reset_idx();
+    newTrajectories.clear();
 }
+
 
 void fill_mpvnn_results(size_t batchIdx, bool isPolicyMap, const float* valueOutputs, const float* probOutputs, Node *node, size_t& tbHits, SideToMove sideToMove, const SearchSettings* searchSettings)
 {
@@ -77,4 +99,5 @@ void fill_mpvnn_results(size_t batchIdx, bool isPolicyMap, const float* valueOut
     node_assign_value(node, valueOutputs, tbHits, batchIdx);
     node->enable_has_large_nn_results();
 }
+
 #endif

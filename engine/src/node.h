@@ -141,7 +141,7 @@ public:
     void revert_virtual_loss_and_update(ChildIdx childIdx, float valueSum, float virtualLoss);
 
 #ifdef MPV_MCTS
-    void update_value_mpv(ChildIdx childIdx, float valueSum, float virtualLoss, int valueFactor);
+    void update_value_mpv(ChildIdx childIdx, float valueSum, int valueFactor);
 #endif
 
     /**
@@ -669,10 +669,10 @@ void backup_collision(float virtualLoss, const Trajectory& trajectory);
  * @param virtualLoss Virtual loss value
  * @param trajectory Trajectory on how to get to the given value eval
  */
-void backup_value(float value, float virtualLoss, const Trajectory& trajectory);
+void backup_value(float value, float virtualLoss, Trajectory trajectory);
 
 #ifdef MPV_MCTS
-void backup_mpv_value(float value, float virtualLoss, const Trajectory& trajectory, size_t valueFactor);
+void backup_mpv_value(float value, Trajectory trajectory, size_t valueFactor);
 #endif
 float get_transposition_q_value(uint_fast32_t transposVisits, double transposQValue, double masterQValue);
 

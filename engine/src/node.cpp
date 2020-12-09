@@ -509,7 +509,7 @@ uint32_t Node::get_real_visits(ChildIdx childIdx) const
     return d->childNumberVisits[childIdx] - d->virtualLossCounter[childIdx];
 }
 
-void backup_value(float value, float virtualLoss, const Trajectory& trajectory) {
+void backup_value(float value, float virtualLoss, Trajectory trajectory) {
     double targetQValue = 0;
     for (auto it = trajectory.rbegin(); it != trajectory.rend(); ++it) {
         if (targetQValue != 0) {
@@ -533,16 +533,16 @@ void backup_value(float value, float virtualLoss, const Trajectory& trajectory) 
 }
 
 #ifdef MPV_MCTS
-void backup_mpv_value(float value, float virtualLoss, const Trajectory& trajectory, size_t valueFactor){
+void backup_mpv_value(float value, Trajectory trajectory, size_t valueFactor){
     for (auto it = trajectory.rbegin(); it != trajectory.rend(); ++it) {
 #ifndef MODE_POMMERMAN
         value = -value;
 #endif
-        it->node->update_value_mpv(it->childIdx, value, virtualLoss, valueFactor);
+        it->node->update_value_mpv(it->childIdx, value, valueFactor);
     }
 }
 
-void Node::update_value_mpv(ChildIdx childIdx, float value, float virtualLoss, int valueFactor)
+void Node::update_value_mpv(ChildIdx childIdx, float value, int valueFactor)
 {
     lock();
 

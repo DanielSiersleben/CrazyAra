@@ -487,7 +487,9 @@ void CrazyAra::init_search_settings()
     validate_device_indices(Options);
     searchSettings.multiPV = Options["MultiPV"];
     searchSettings.threads = Options["Threads"] * get_num_gpus(Options);
+    searchSettings.backpropThreads = Options["backpropThreads"];
 #ifdef MPV_MCTS
+    searchSettings.largeNetBackpropThreads = Options["largeNetBackpropThreads"];
     searchSettings.largeNetBatchSize = Options["largeNetBatchSize"];
     searchSettings.mpvThreads = Options["mpvThreads"] * get_num_gpus(Options);
     searchSettings.largeNetEvalThreshold = Options["largeNetThreshold"];

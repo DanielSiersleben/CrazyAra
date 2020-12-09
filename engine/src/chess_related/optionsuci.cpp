@@ -143,6 +143,10 @@ void OptionsUCI::init(OptionsMap &o)
     o["Random_Playout"]                << Option(false);
     o["Fixed_Movetime"]                << Option(0, 0, 99999999);
     o["Reuse_Tree"]                    << Option(true);
+    o["backpropThreads"]        << Option(1, 1, 10);
+#ifdef MPV_MCTS
+    o["largeNetBackpropThreads"]       << Option(3, 2 , 10);
+#endif
 }
 
 void OptionsUCI::setoption(istringstream &is)
