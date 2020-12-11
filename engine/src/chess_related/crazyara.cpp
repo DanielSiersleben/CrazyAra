@@ -392,7 +392,7 @@ bool CrazyAra::is_ready()
         init_rl_settings();
 #endif
 #ifdef MPV_MCTS
-        netSingle = create_new_net_single(Options["Small_Model_Directory"]);
+        netSingle = create_new_net_single(Options["Large_Model_Directory"]);
         netBatches = create_new_net_batches(Options["Small_Model_Directory"]);
 
         mpvNetBatches = create_new_mpvnet_batches(Options["Large_Model_Directory"]);
@@ -493,6 +493,7 @@ void CrazyAra::init_search_settings()
     searchSettings.largeNetBatchSize = Options["largeNetBatchSize"];
     searchSettings.mpvThreads = Options["mpvThreads"] * get_num_gpus(Options);
     searchSettings.largeNetEvalThreshold = Options["largeNetThreshold"];
+    searchSettings.largeNetStartPhase = Options["largeNetStartPhase"];
 #endif
     searchSettings.batchSize = Options["Batch_Size"];
     searchSettings.useTranspositionTable = Options["Use_Transposition_Table"];

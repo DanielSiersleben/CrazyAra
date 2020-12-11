@@ -48,6 +48,7 @@
 
 #ifdef MPV_MCTS
 #include "mpvnodequeue.h"
+#include "mpvsearchthread.h"
 #endif
 
 using namespace crazyara;
@@ -87,7 +88,7 @@ protected:
     GCThread<Node> gcThread;
 
 #ifdef MPV_MCTS
-    atomic_size_t nodeQueueIdx;
+    atomic_int nodeQueueIdx;
     mutex nodeQueueMutex;
     MPVNodeQueue largeNetNodeQueue;
 #endif

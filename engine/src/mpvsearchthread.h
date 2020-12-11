@@ -11,7 +11,7 @@ class MPVSearchThread : public SearchThread
 public:
     MPVSearchThread(NeuralNetAPI* netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex, MPVNodeQueue* nodeQueue);
 
-    void create_mini_batch() override;
+    void create_mpv_mini_batch();
 
     void thread_iteration() override;
 

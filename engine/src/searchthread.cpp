@@ -197,10 +197,8 @@ Node* SearchThread::get_new_child_to_evaluate(ChildIdx& childIdx, NodeDescriptio
         if(currentNode->get_real_visits() >= searchSettings->largeNetEvalThreshold && !currentNode->evaluatedByLargeNet())
         {
             int idx = nodeQueue->fetch_and_increase_Index();
-            newState->get_state_planes(true, nodeQueue->getInputPlanes()+idx*StateConstants::NB_VALUES_TOTAL());
-            Trajectory tmp;
-            std::copy(trajectoryBuffer.begin(), trajectoryBuffer.end()-1, back_inserter(tmp));
-            nodeQueue->insert(currentNode, newState->side_to_move(), tmp, idx);
+            newState->get_state_planes(true, nodeQueue->getInputPlanes()+(idx % nodeQueue->batchSize)*StateConstants::NB_VALUES_TOTAL());
+            nodeQueue->insert(currentNode, newState->side_to_move(), trajectoryBuffer, idx);
             currentNode->enable_node_is_enqueued();
 
         }
@@ -382,8 +380,8 @@ void SearchThread::thread_iteration()
         net->predict(inputPlanes, valueOutputs, probOutputs);
         set_nn_results_to_child_nodes();
     }
-    backup_value_outputs();
-    backup_collisions();
+    SearchThread::backup_value_outputs();
+    SearchThread::backup_collisions();
 }
 
 void SearchThread::deleteWorkerThreads(){

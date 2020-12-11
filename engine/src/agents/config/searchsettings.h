@@ -36,6 +36,7 @@ struct SearchSettings
     size_t threads;
     size_t backpropThreads;
 #ifdef MPV_MCTS
+    bool largeNetStartPhase;
     size_t largeNetBackpropThreads;
     size_t mpvThreads;
     size_t largeNetEvalThreshold;

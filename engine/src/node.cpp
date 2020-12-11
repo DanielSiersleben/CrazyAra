@@ -365,7 +365,11 @@ bool Node::is_terminal() const
 
 bool Node::has_nn_results() const
 {
+#ifdef MPV_MCTS
+    return hasNNResults || hasLargeNNResults;
+#else
     return hasNNResults;
+#endif
 }
 
 #ifdef MPV_MCTS

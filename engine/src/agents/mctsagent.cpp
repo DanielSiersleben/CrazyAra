@@ -187,7 +187,11 @@ void MCTSAgent::create_new_root_node(StateObj* state)
     state->get_state_planes(true, inputPlanes);
     net->predict(inputPlanes, valueOutputs, probOutputs);
     size_t tbHits = 0;
+#ifdef MPV_MCTS
+    fill_mpvnn_results(0, net->is_policy_map(), valueOutputs, probOutputs, rootNode, tbHits, state->side_to_move(), searchSettings);
+#else
     fill_nn_results(0, net->is_policy_map(), valueOutputs, probOutputs, rootNode, tbHits, state->side_to_move(), searchSettings);
+#endif
     rootNode->prepare_node_for_visits();
 }
 
@@ -317,11 +321,13 @@ void MCTSAgent::run_mcts_search()
     thread** threads = new thread*[totalThreads];
 
 #ifdef MPV_MCTS
-    // this loop currently only works for 1 additional thread
     for (size_t i = searchSettings->threads; i < totalThreads; ++i){
         searchThreads[i]->set_root_node(rootNode);
         searchThreads[i]->set_root_state(rootState);
         searchThreads[i]->set_search_limits(searchLimits);
+        if(searchSettings->largeNetStartPhase){
+            searchThreads[i]->SearchThread::thread_iteration();
+        }
         threads[i] = new thread(run_search_thread, searchThreads[i]);
     }
 #endif
@@ -330,7 +336,7 @@ void MCTSAgent::run_mcts_search()
         searchThreads[i]->set_root_node(rootNode);
         searchThreads[i]->set_root_state(rootState);
         searchThreads[i]->set_search_limits(searchLimits);
-        //searchThreads[i]->setLargeNetInputPlanes(largeNetInputPlanes);
+
         threads[i] = new thread(run_search_thread, searchThreads[i]);
     }
     int curMovetime = timeManager->get_time_for_move(searchLimits, rootState->side_to_move(), rootNode->plies_from_null()/2);

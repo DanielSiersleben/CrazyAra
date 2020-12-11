@@ -59,6 +59,7 @@ void OptionsUCI::init(OptionsMap &o)
     o["MPVThreads"]                       << Option(1, 1, 512);
     o["largeNetThreshold"]                       << Option(1000, 100, 999999);
     o["largeNetBatchSize"]             << Option(64, 1, 8192);
+    o["largeNetStartPhase"]            << Option(false);
 #endif
     o["Centi_CPuct_Init"]              << Option(250, 1, 99999);
     o["CPuct_Base"]                    << Option(19652, 1, 99999);
@@ -145,7 +146,7 @@ void OptionsUCI::init(OptionsMap &o)
     o["Reuse_Tree"]                    << Option(true);
     o["backpropThreads"]        << Option(1, 1, 10);
 #ifdef MPV_MCTS
-    o["largeNetBackpropThreads"]       << Option(3, 2 , 10);
+    o["largeNetBackpropThreads"]       << Option(2, 2 , 10);
 #endif
 }
 

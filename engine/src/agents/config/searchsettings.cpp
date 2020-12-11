@@ -31,6 +31,7 @@ SearchSettings::SearchSettings():
         largeNetEvalThreshold(1000),
         largeNetBatchSize(64),
         largeNetBackpropThreads(1),
+        largeNetStartPhase(true),
     #endif
         backpropThreads(1),
         threads(2),

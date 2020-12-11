@@ -1,6 +1,7 @@
 #include "mpvsearchthread.h"
 #include <thread>
 
+
 #ifdef MPV_MCTS
 
 MPVSearchThread::MPVSearchThread(NeuralNetAPI* netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex, MPVNodeQueue *nodeQueue):
@@ -20,11 +21,9 @@ void MPVSearchThread::reset_stats()
     nodeQueue->clear();
     this->workerThreads = new thread*[searchSettings->largeNetBackpropThreads];
 
-    // not sure if necessary
-    // nodeQueue->inputPlanes = inputPlanes;
 }
 
-void MPVSearchThread::create_mini_batch()
+void MPVSearchThread::create_mpv_mini_batch()
 {
    if(nodeQueue->batchIdx->load() >= nodeQueue->batchSize){
        for(size_t i = 0; i < nodeQueue->batchSize; ++i){
@@ -48,16 +47,15 @@ void MPVSearchThread::set_nn_results_to_child_nodes()
 
 void MPVSearchThread::thread_iteration()
 {
-    create_mini_batch();
+    create_mpv_mini_batch();
     if (newNodes->size() != 0) {
         net->predict(inputPlanes, valueOutputs, probOutputs);
         set_nn_results_to_child_nodes();
-        nodeQueue->clear();
+        nodeQueue->resetIdx();
         backup_value_outputs();
 
         newNodeSideToMove->reset_idx();
     }
-
 }
 
 void backup_mpvnet_values(FixedVector<Node*>* nodes, vector<Trajectory>* trajectories, atomic_int* idx, SearchSettings* searchSettings)

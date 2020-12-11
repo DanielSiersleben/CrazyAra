@@ -118,7 +118,7 @@ public:
      * If the node was found in the hash-table it's value is backpropagated without requesting the NN.
      * If a collision occurs (the same node was selected multiple times), it will be added to the collisionNodes vector
      */
-    virtual void create_mini_batch();
+    void create_mini_batch();
 
     /**
      * @brief thread_iteration Runs multiple mcts-rollouts as long as a new batch is filled
@@ -178,9 +178,6 @@ public:
     size_t get_max_depth() const;
 
 private:
-#ifdef MPV_MCTS
-    void addNodeToLargeNetQueue(Node* node, unique_ptr<StateObj> state);
-#endif
     /**
      * @brief set_nn_results_to_child_nodes Sets the neural network value evaluation and policy prediction vector for every newly expanded nodes
      */
