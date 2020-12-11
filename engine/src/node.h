@@ -134,11 +134,74 @@ public:
     ChildIdx select_child_node(const SearchSettings* searchSettings);
 
     /**
-     * @brief revert_virtual_loss_and_update Revert the virtual loss effect and apply the backpropagated value of its child node
+     * @brief revert_virtual_loss_and_update Reverts the virtual loss and updates the Q-value and visits
+     * @param value New value to update Q
+     *
+     * Example:
+     * Q-value update on 2nd iteration
+     * 0. Starting point: Initialized with e.g. 0.5 after first backup, vl = virtual loss
+     *   Q_0 = 0.5, n_0 = 1; vl = 1
+     * 1. Apply virtual loss
+     *   Q_1 = (Q_0 * n_0 - vl) / (n_0 + vl)
+     *       = (0.5 * 1 - 1) / (1 + 1)
+     *       = - 0.25
+     * 2. Increase visits by virtual loss
+     *   n_1 = n_0 + vl
+     *       = 1 + 1
+     *       = 2
+     * 3. Revert virtual loss
+     *   Q_2 = (Q_1 * n_1 + vl) / (n_1 - vl)
+     *       = (-0.25 * 2 + 1) / (2 - 1)
+     *       = 0.5
+     * 4. Update Q-value by new value (e.g. val = 0.7)
+     *   Q_3 = (Q_2 * (n_1 - vl) + val) / (n_1)
+     *       = (0.5 * (2 - 1) + 0.7) / 2
+     *       = 0.6
+     *
+     * Note step 3. & 4. ca be expressed as a single update based on Q_1:
+     * 3. & 4.: Revert value and update
+     *   Q_3 = (Q_1 * n_1 + vl + val) / n_1
+     *       = (-0.25 * 2 + 1 + 0.7) / 2
+     *       = 0.6
+     *
      * @param childIdx Index to the child node to update
      * @param value Specifies the value evaluation to backpropagate
+     * @param solveForTerminal Decides if the terminal solver will be used
      */
-    void revert_virtual_loss_and_update(ChildIdx childIdx, float valueSum, float virtualLoss);
+    template<bool terminalBackup>
+    void revert_virtual_loss_and_update(ChildIdx childIdx, float value, float virtualLoss, bool& solveForTerminal)
+    {
+        lock();
+        // decrement virtual loss counter
+        update_virtual_loss_counter<false>(childIdx);
+
+        valueSum += value;
+        ++realVisitsSum;
+
+        if (d->childNumberVisits[childIdx] == virtualLoss) {
+            // set new Q-value based on return
+            // (the initialization of the Q-value was by Q_INIT which we don't want to recover.)
+            d->qValues[childIdx] = value;
+        }
+        else {
+            // revert virtual loss and update the Q-value
+            assert(d->childNumberVisits[childIdx] != 0);
+            d->qValues[childIdx] = (double(d->qValues[childIdx]) * d->childNumberVisits[childIdx] + virtualLoss + value) / d->childNumberVisits[childIdx];
+            assert(!isnan(d->qValues[childIdx]));
+        }
+
+        if (virtualLoss != 1) {
+            d->childNumberVisits[childIdx] -= size_t(virtualLoss) - 1;
+            d->visitSum -= size_t(virtualLoss) - 1;
+        }
+        if (terminalBackup) {
+            ++d->terminalVisits;
+        }
+        if (solveForTerminal) {
+            solveForTerminal = solve_for_terminal(childIdx);
+        }
+        unlock();
+    }
 
 #ifdef MPV_MCTS
     void update_value_mpv(ChildIdx childIdx, float valueSum, int valueFactor);
@@ -174,40 +237,6 @@ public:
     uint32_t get_real_visits() const;
 
     void apply_virtual_loss_to_child(ChildIdx childIdx, float virtualLoss);
-
-    /**
-     * @brief revert_virtual_loss_and_update Reverts the virtual loss and updates the Q-value and visits
-     * @param value New value to update Q
-     *
-     * Example:
-     * Q-value update on 2nd iteration
-     * 0. Starting point: Initialized with e.g. 0.5 after first backup, vl = virtual loss
-     *   Q_0 = 0.5, n_0 = 1; vl = 1
-     * 1. Apply virtual loss
-     *   Q_1 = (Q_0 * n_0 - vl) / (n_0 + vl)
-     *       = (0.5 * 1 - 1) / (1 + 1)
-     *       = - 0.25
-     * 2. Increase visits by virtual loss
-     *   n_1 = n_0 + vl
-     *       = 1 + 1
-     *       = 2
-     * 3. Revert virtual loss
-     *   Q_2 = (Q_1 * n_1 + vl) / (n_1 - vl)
-     *       = (-0.25 * 2 + 1) / (2 - 1)
-     *       = 0.5
-     * 4. Update Q-value by new value (e.g. val = 0.7)
-     *   Q_3 = (Q_2 * (n_1 - vl) + val) / (n_1)
-     *       = (0.5 * (2 - 1) + 0.7) / 2
-     *       = 0.6
-     *
-     * Note step 3. & 4. ca be expressed as a single update based on Q_1:
-     * 3. & 4.: Revert value and update
-     *   Q_3 = (Q_1 * n_1 + vl + val) / n_1
-     *       = (-0.25 * 2 + 1 + 0.7) / 2
-     *       = 0.6
-     *
-     */
-    void revert_virtual_loss_and_update(float valueSum);
 
     void increment_no_visit_idx();
     void fully_expand_node();
@@ -420,7 +449,16 @@ public:
     double get_q_sum(ChildIdx childIdx, float virtualLoss) const;
 
     template<bool increment>
-    void update_virtual_loss_counter(ChildIdx childIdx);
+    void update_virtual_loss_counter(ChildIdx childIdx)
+    {
+        if (increment) {
+            ++d->virtualLossCounter[childIdx];
+        }
+        else {
+            assert(d->virtualLossCounter[childIdx] != 0);
+            --d->virtualLossCounter[childIdx];
+        }
+    }
 
     uint8_t get_virtual_loss_counter(ChildIdx childIdx) const;
 
@@ -463,6 +501,7 @@ private:
      */
     void check_for_terminal(StateObj* state, bool inCheck);
 
+#ifdef MCTS_TB_SUPPORT
     /**
      * @brief check_for_tablebase_wdl Checks if the given board position is a tablebase position and
      *  updates isTerminal and the value evaluation
@@ -470,19 +509,23 @@ private:
      */
     void check_for_tablebase_wdl(StateObj* state);
 
+    void mark_as_tablebase();
+#endif
+
     /**
      * @brief solve_for_terminal Tries to solve the current node to be a forced win, loss or draw.
      * The main idea is based on the paper "Exact-Win Strategy for Overcoming AlphaZero" by Chen et al.
      * https://www.researchgate.net/publication/331216459_Exact-Win_Strategy_for_Overcoming_AlphaZero
      * The solver uses the current backpropagating child node as well as all available child nodes.
      * @param childNode Child nodes which backpropagates the value
+     * @return true, if the node type of the current node was modified
      */
-    void solve_for_terminal(uint_fast16_t childIdx);
+    bool solve_for_terminal(ChildIdx childIdx);
 
     /**
      * @brief solved_win Checks if the current node is a solved win based on the given child node
      * @param childNode Child nodes which backpropagates the value
-     * @return true for SOLVE_WIN else false
+     * @return true for WIN else false
      */
     bool solved_win(const Node* childNode) const;
 
@@ -490,7 +533,7 @@ private:
      * @brief solved_draw Checks if the current node is a solved draw based on the given child node
      * and all available child node
      * @param childNode Child nodes which backpropagates the value
-     * @return true for SOLVED_DRAW else false
+     * @return true for DRAW else false
      */
     bool solved_draw(const Node* childNode) const;
 
@@ -509,7 +552,7 @@ private:
     /**
      * @brief solved_loss Checks if the current node is a solved loss based on the given child node
      * @param childNode Child nodes which backpropagates the value
-     * @return true for SOLVED_LOSS else false
+     * @return true for LOSS else false
      */
     bool solved_loss(const Node* childNode) const;
 
@@ -527,6 +570,51 @@ private:
      * @brief mark_as_win Marks the current node as a winning node
      */
     void mark_as_win();
+
+#ifdef MCTS_TB_SUPPORT
+    /**
+     * @brief solve_tb_win Checks if the current node is a solved tablebase win based on the given child node
+     * @param childNode Child nodes which backpropagates the value
+     * @return true for TB_WIN else false
+     */
+    bool solve_tb_win(const Node* childNode) const;
+
+    /**
+     * @brief solved_tb_draw Checks if the current node is a solved tablebase draw based on the given child node
+     * and all available child node
+     * @param childNode Child nodes which backpropagates the value
+     * @return true for TB_DRAW else false
+     */
+    bool solved_tb_draw(const Node* childNode) const;
+
+    /**
+     * @brief solved_tb_loss Checks if the current node is a solved tablebase loss based on the given child node
+     * @param childNode Child nodes which backpropagates the value
+     * @return true for TB_LOSS else false
+     */
+    bool solved_tb_loss(const Node* childNode) const;
+
+    /**
+     * @brief only_won_tb_child_nodws Checks if this node has only WON child nodes
+     * @return true if only WIN_TB child nodes exist else false
+     */
+    bool only_won_tb_child_nodes() const;
+
+    /**
+     * @brief mark_as_tb_loss Marks the current node as a tablebase loss
+     */
+    void mark_as_tb_loss();
+
+    /**
+     * @brief mark_as_tb_draw Marks the current node as a tablebase draw
+     */
+    void mark_as_tb_draw();
+
+    /**
+     * @brief mark_as_tb_win Marks the current node as a tablebase win
+     */
+    void mark_as_tb_win();
+#endif
 
     /**
      * @brief define_end_ply_for_solved_terminal Calculates the number of plies in which the terminal will be reached.
@@ -633,7 +721,7 @@ float get_current_u_divisor(float numberVisits, float uMin, float uInit, float u
 const char* node_type_to_string(enum NodeType nodeType);
 
 /**
- * @brief flip_node_type Flips the node type value (e.g. SOLVED_WIN into SOLVED_LOSS)
+ * @brief flip_node_type Flips the node type value (e.g. WIN into LOSS)
  * @param nodeType Node type
  * @return flipped node type
  */
@@ -661,6 +749,8 @@ size_t get_node_count(const Node* node);
  */
 void backup_collision(float virtualLoss, const Trajectory& trajectory);
 
+float get_transposition_q_value(uint_fast32_t transposVisits, double transposQValue, double masterQValue);
+
 /**
  * @brief backup_value Iteratively backpropagates a value prediction across all of the parents for this node.
  * The value is flipped at every ply.
@@ -668,12 +758,36 @@ void backup_collision(float virtualLoss, const Trajectory& trajectory);
  * @param value Value evaluation to backup, this is the NN eval in the general case or can be from a terminal node
  * @param virtualLoss Virtual loss value
  * @param trajectory Trajectory on how to get to the given value eval
+ * @param solveForTerminal Decides if the terminal solver will be used
  */
-void backup_value(float value, float virtualLoss, Trajectory trajectory);
+template <bool terminal>
+void backup_value(float value, float virtualLoss, const Trajectory& trajectory, bool solveForTerminal) {
+    double targetQValue = 0;
+    for (auto it = trajectory.rbegin(); it != trajectory.rend(); ++it) {
+        if (targetQValue != 0) {
+            const uint_fast32_t transposVisits = it->node->get_real_visits(it->childIdx);
+            if (transposVisits != 0) {
+                const double transposQValue = -it->node->get_q_sum(it->childIdx, virtualLoss) / transposVisits;
+                value = get_transposition_q_value(transposVisits, transposQValue, targetQValue);
+            }
+        }
+#ifndef MCTS_SINGLE_PLAYER
+        value = -value;
+#endif
+        terminal ? it->node->revert_virtual_loss_and_update<true>(it->childIdx, value, virtualLoss, solveForTerminal) :
+                   it->node->revert_virtual_loss_and_update<false>(it->childIdx, value, virtualLoss, solveForTerminal);
 
+        if (it->node->is_transposition()) {
+            targetQValue = it->node->get_value();
+        }
+        else {
+            targetQValue = 0;
+        }
+    }
+}
 #ifdef MPV_MCTS
 void backup_mpv_value(float value, Trajectory trajectory, size_t valueFactor);
 #endif
-float get_transposition_q_value(uint_fast32_t transposVisits, double transposQValue, double masterQValue);
+
 
 #endif // NODE_H

@@ -100,7 +100,7 @@ void OptionsUCI::init(OptionsMap &o)
 #endif
     o["Allow_Early_Stopping"]          << Option(true);
     o["Use_Raw_Network"]               << Option(false);
-    o["Enhance_Checks"]                << Option(true);
+    o["Enhance_Checks"]                << Option(false);
 //    o["Enhance_Captures"]              << Option(false);         currently disabled
     o["Use_Transposition_Table"]       << Option(false);
 #ifdef TENSORRT
@@ -132,11 +132,11 @@ void OptionsUCI::init(OptionsMap &o)
     o["Centi_Resign_Threshold"]        << Option(-90, -100, 100);
     o["Reuse_Tree"]                    << Option(false);
 #endif
-    o["Move_Overhead"]                 << Option(50, 0, 5000);
+    o["Move_Overhead"]                 << Option(20, 0, 5000);
     o["Centi_Random_Move_Factor"]      << Option(0, 0, 99);
     o["SyzygyPath"]                    << Option("<empty>");
     o["Log_File"]                      << Option("", on_logger);
-    o["Use_NPS_Time_Manager"]          << Option(true);
+    o["Use_NPS_Time_Manager"]          << Option(false);
     o["Use_Advantage"]                 << Option(false);
 #ifdef SUPPORT960
     o["UCI_Chess960"]                  << Option(true);
@@ -148,6 +148,7 @@ void OptionsUCI::init(OptionsMap &o)
 #ifdef MPV_MCTS
     o["largeNetBackpropThreads"]       << Option(2, 2 , 10);
 #endif
+    o["MCTS_Solver"]                   << Option(true);
 }
 
 void OptionsUCI::setoption(istringstream &is)

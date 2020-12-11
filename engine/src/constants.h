@@ -56,14 +56,20 @@ const string engineName = "ClassicAra";
 const string engineVersion = "0.8.4";
 const string engineAuthors = "Johannes Czech, Moritz Willig, Alena Beyer et al.";
 
-#define LOSS -1
-#define DRAW 0
-#define WIN 1
+#define LOSS_VALUE -1
+#define DRAW_VALUE 0
+#define WIN_VALUE 1
 #define PRESERVED_ITEMS 8
 // Pre-initialized index when no forced win was found: 2^16 - 1
 #define NO_CHECKMATE 65535
 #define Q_VALUE_DIFF 0.1f
 #define RANDOM_MOVE_COUNTER 25
+#define RANDOM_MAX_DEPTH 5U
+const uint random_move_counter[RANDOM_MAX_DEPTH] = {RANDOM_MOVE_COUNTER,
+                                                    RANDOM_MOVE_COUNTER*RANDOM_MOVE_COUNTER,
+                                                    RANDOM_MOVE_COUNTER*RANDOM_MOVE_COUNTER*RANDOM_MOVE_COUNTER,
+                                                    RANDOM_MOVE_COUNTER*RANDOM_MOVE_COUNTER*RANDOM_MOVE_COUNTER*RANDOM_MOVE_COUNTER,
+                                                    RANDOM_MOVE_COUNTER*RANDOM_MOVE_COUNTER*RANDOM_MOVE_COUNTER*RANDOM_MOVE_COUNTER*RANDOM_MOVE_COUNTER};
 #define Q_INIT -1.0f
 #define DEPTH_INIT 64
 #define CHECK_ENHANCE_COUNTER_PERIOD 1000

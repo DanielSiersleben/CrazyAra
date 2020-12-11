@@ -62,7 +62,8 @@ SearchSettings::SearchSettings():
         useNPSTimemanager(false),
         useTablebase(false),
         useRandomPlayout(false),
-        reuseTree(true)
+        reuseTree(true),
+        mctsSolver(false)
 {
 
 }
