@@ -44,9 +44,20 @@ struct MPVNodeQueue{
 
     void clear(){
         int currIdx = batchIdx->load();
-        for(int idx = 0; idx < currIdx; ++idx){
-            queue[idx]->disable_node_is_enqueued();
+        if(currIdx >= batchSize){
+            for(int idx = 0; idx < batchSize; ++idx){
+                queue[idx]->disable_node_is_enqueued();
+            }
+            for(int idx = 0; idx < currIdx % batchSize; ++idx){
+                queueBuffer[idx]->disable_node_is_enqueued();
+            }
         }
+        else{
+            for(int idx = 0; idx < currIdx % batchSize; ++idx){
+                queue[idx]->disable_node_is_enqueued();
+            }
+        }
+
         batchIdx->store(0);
         dataBuffered =  false;
     }
