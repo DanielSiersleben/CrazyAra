@@ -8,6 +8,8 @@
 
 class MPVSearchThread : public SearchThread
 {
+private:
+    thread** workerThreads;
 public:
     MPVSearchThread(NeuralNetAPI* netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex, MPVNodeQueue* nodeQueue);
 
@@ -18,6 +20,10 @@ public:
     void reset_stats() override;
 
     void backup_value_outputs() override;
+
+    void deleteWorkerThreads();
+
+    void set_is_running(bool value) override;
 
 private:
     void set_nn_results_to_child_nodes() override;

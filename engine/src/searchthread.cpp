@@ -272,9 +272,6 @@ void SearchThread::reset_stats()
     tbHits = 0;
     depthMax = 0;
     depthSum = 0;
-    if(searchSettings->backpropThreads > 1){
-        this->workerThreads = new thread*[searchSettings->backpropThreads];
-    }
 }
 
 void fill_nn_results(size_t batchIdx, bool is_policy_map, const float* valueOutputs, const float* probOutputs, Node *node, size_t& tbHits, SideToMove sideToMove, const SearchSettings* searchSettings)
@@ -303,10 +300,7 @@ void SearchThread::set_nn_results_to_child_nodes()
 
 void SearchThread::backup_value_outputs()
 {
-    if(searchSettings->backpropThreads > 1){
-        run_worker_backprop();
-    }
-    else backup_values(newNodes.get(), newTrajectories);
+    backup_values(newNodes.get(), newTrajectories);
     newNodeSideToMove->reset_idx();
     backup_values(transpositionValues.get(), transpositionTrajectories);
 }
@@ -384,11 +378,6 @@ void SearchThread::thread_iteration()
     SearchThread::backup_collisions();
 }
 
-void SearchThread::deleteWorkerThreads(){
-    if(searchSettings->backpropThreads > 1){
-        delete[] workerThreads;
-    }
-}
 
 void run_search_thread(SearchThread *t)
 {
@@ -397,33 +386,9 @@ void run_search_thread(SearchThread *t)
     while(t->is_running() && t->nodes_limits_ok() && t->is_root_node_unsolved()) {
         t->thread_iteration();
     }
-    t->deleteWorkerThreads();
     t->set_is_running(false);
 }
 
-void SearchThread::run_worker_backprop()
-{
-    atomic_size_t idx = -1;
-    for(auto i = 0; i < searchSettings->backpropThreads; ++i){
-        workerThreads[i] = new thread(backup_values_worker, newNodes.get(), &newTrajectories, &idx, searchSettings->virtualLoss);
-    }
-
-    for(auto i = 0; i < searchSettings->backpropThreads; ++i){
-        workerThreads[i]->join();
-    }
-    newNodes->reset_idx();
-    newTrajectories.clear();
-}
-
-void backup_values_worker(FixedVector<Node*>* nodes, vector<Trajectory>* trajectories, atomic_size_t* idx, float virtualLoss)
-{
-    size_t currIdx;
-
-    while((currIdx = idx->fetch_add(1)) < nodes->size()){
-        const Node* node = nodes->get_element(currIdx);
-        backup_value(node->get_value(), virtualLoss, (*trajectories)[currIdx]);
-    }
-}
 
 void SearchThread::backup_values(FixedVector<Node*>* nodes, vector<Trajectory>& trajectories) {
     for (size_t idx = 0; idx < nodes->size(); ++idx) {

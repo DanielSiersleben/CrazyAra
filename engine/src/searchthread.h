@@ -92,8 +92,6 @@ protected:
     size_t depthMax;
     size_t visitsPreSearch;
 
-    thread** workerThreads;
-
 #ifdef MPV_MCTS
     float* largeNetInputPlanes;
     MPVNodeQueue *nodeQueue;
@@ -167,8 +165,6 @@ public:
     virtual void reset_stats();
 
     void run_worker_backprop();
-
-    void deleteWorkerThreads();
 
     void set_root_state(StateObj* value);
     size_t get_tb_hits() const;

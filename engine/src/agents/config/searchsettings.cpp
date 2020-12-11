@@ -33,7 +33,6 @@ SearchSettings::SearchSettings():
         largeNetBackpropThreads(1),
         largeNetStartPhase(true),
     #endif
-        backpropThreads(1),
         threads(2),
         batchSize(2),
         dirichletEpsilon(0.25f),

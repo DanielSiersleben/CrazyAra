@@ -57,7 +57,7 @@ void OptionsUCI::init(OptionsMap &o)
     o["Threads"]                       << Option(3, 1, 512);
 #ifdef MPV_MCTS
     o["MPVThreads"]                       << Option(1, 1, 512);
-    o["largeNetThreshold"]                       << Option(1000, 100, 999999);
+    o["largeNetThreshold"]                       << Option(1000, 10, 999999);
     o["largeNetBatchSize"]             << Option(64, 1, 8192);
     o["largeNetStartPhase"]            << Option(false);
 #endif
@@ -111,7 +111,7 @@ void OptionsUCI::init(OptionsMap &o)
     o["Small_Model_Directory"]               << Option("model/small_net");
     o["Large_Model_Directory"]               << Option("model/large_net");
 #elif MODE_CRAZYHOUSE
-    o["Model_Directory"]               << Option("model/large_net");
+    o["Model_Directory"]               << Option("model/small_net");
 #else
     o["Model_Directory"]               << Option("model");
 #endif
@@ -144,7 +144,6 @@ void OptionsUCI::init(OptionsMap &o)
     o["Random_Playout"]                << Option(false);
     o["Fixed_Movetime"]                << Option(0, 0, 99999999);
     o["Reuse_Tree"]                    << Option(true);
-    o["backpropThreads"]        << Option(1, 1, 10);
 #ifdef MPV_MCTS
     o["largeNetBackpropThreads"]       << Option(2, 2 , 10);
 #endif

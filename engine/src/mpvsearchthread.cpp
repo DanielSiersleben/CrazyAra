@@ -89,6 +89,18 @@ void MPVSearchThread::backup_value_outputs()
     newTrajectories.clear();
 }
 
+void MPVSearchThread::set_is_running(bool value)
+{
+    isRunning = value;
+    if(value = false){
+        deleteWorkerThreads();
+    }
+}
+
+void MPVSearchThread::deleteWorkerThreads(){
+        delete[] workerThreads;
+}
+
 
 void fill_mpvnn_results(size_t batchIdx, bool isPolicyMap, const float* valueOutputs, const float* probOutputs, Node *node, size_t& tbHits, SideToMove sideToMove, const SearchSettings* searchSettings)
 {
