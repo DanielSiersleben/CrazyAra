@@ -36,59 +36,51 @@ struct MPVNodeQueue{
     }
 
 
-    MPVNodeQueue(){}
 
     void setInputPlanes(float* iP){
-        this->inputPlanes = unique_ptr<float[]>(iP);
+        this->inputPlanes.reset(iP);
     }
 
     void clear(){
         int currIdx = batchIdx->load();
-        if(currIdx >= batchSize){
-            for(int idx = 0; idx < batchSize; ++idx){
-                queue[idx]->disable_node_is_enqueued();
-            }
-            for(int idx = 0; idx < currIdx % batchSize; ++idx){
-                queueBuffer[idx]->disable_node_is_enqueued();
-            }
-        }
-        else{
-            for(int idx = 0; idx < currIdx % batchSize; ++idx){
-                queue[idx]->disable_node_is_enqueued();
-            }
-        }
+
+        queue.reset(new Node*[batchSize]);
+        sideToMove.reset(new SideToMove[batchSize]);
+        trajectories.reset(new Trajectory[batchSize]);
+        queueBuffer.reset(new Node*[batchSize]);
+        sideToMoveBuffer.reset(new SideToMove[batchSize]);
+        trajectoriesBuffer.reset(new Trajectory[batchSize]);
+        inputBuffer.reset(new float[batchSize * StateConstants::NB_VALUES_TOTAL()]);
 
         batchIdx->store(0);
         dataBuffered =  false;
     }
 
     void resetIdx(){
-        int currIdx = batchIdx->load();
+        batchIdx->store(0);
 
+        /* Buffering Currently Disabled
+        int currIdx = batchIdx->load();
         if(currIdx <= batchSize){
-            /*for(int idx = 0; idx < currIdx; ++idx){
+            for(int idx = 0; idx < currIdx; ++idx){
                     queue[idx]->disable_node_is_enqueued();
-            }*/
+            }
             batchIdx->store(0);
         }
         else{
-            if(dataBuffered){
-                currIdx -= batchSize;
-                batchIdx->store(currIdx);
-                mtx->lock();
-                std::copy(inputBuffer.get(), inputBuffer.get() + currIdx*StateConstants::NB_VALUES_TOTAL(), inputPlanes.get());
-                swap(queue, queueBuffer);
-                swap(sideToMove, sideToMoveBuffer);
-                swap(trajectories, trajectoriesBuffer);
+            assert(dataBuffered);
+            currIdx -= batchSize;
+            mtx->lock();
+            batchIdx->store(currIdx);
+            std::copy(inputBuffer.get(), inputBuffer.get() + (currIdx-1)*StateConstants::NB_VALUES_TOTAL(), inputPlanes.get());
+            swap(queue, queueBuffer);
+            swap(sideToMove, sideToMoveBuffer);
+            swap(trajectories, trajectoriesBuffer);
 
-                dataBuffered = false;
-                mtx->unlock();
-            }
-            else{
-                batchIdx->store(0);
-            }
+            dataBuffered = false;
+            mtx->unlock();
 
-        }
+        }*/
     }
 
     int fetch_and_increase_Index(){
@@ -103,21 +95,24 @@ struct MPVNodeQueue{
             this->trajectories[index] = trajectory;
         }
         else{
-            this->queueBuffer[index - batchSize] = node;
-            this->sideToMoveBuffer[index - batchSize] = side;
-            this->trajectoriesBuffer[index - batchSize] = trajectory;
+            this->queueBuffer[index % batchSize] = node;
+            this->sideToMoveBuffer[index % batchSize] = side;
+            this->trajectoriesBuffer[index % batchSize] = trajectory;
             mtx->unlock();
         }
     }
 
-    float* getInputPlanes(){
-        if(batchIdx->load() > batchSize){
+    float* getInputPlanes(int idx){
+        return inputPlanes.get();
+
+        //currently disabled Buffering
+        if(idx >= batchSize){
             dataBuffered = true;
-            mtx->lock();
+            cout << "buffering" << endl;
+            // make sure that buffer isnt swapped while not finished
             return inputBuffer.get();
         }
         else{
-            dataBuffered = false;
             return inputPlanes.get();
         }
     }

@@ -620,7 +620,6 @@ void Node::update_value_mpv(ChildIdx childIdx, float value, int valueFactor)
        // d->childNumberVisits[childIdx] -= - valueFactor;
        // d->visitSum -= - valueFactor;
 
-       // d->largeNetBackpropCount += valueFactor;
     unlock();
 }
 #endif

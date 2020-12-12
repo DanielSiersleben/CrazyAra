@@ -197,10 +197,11 @@ Node* SearchThread::get_new_child_to_evaluate(ChildIdx& childIdx, NodeDescriptio
         if(currentNode->get_real_visits() >= searchSettings->largeNetEvalThreshold && !currentNode->evaluatedByLargeNet())
         {
             int idx = nodeQueue->fetch_and_increase_Index();
-            newState->get_state_planes(true, nodeQueue->getInputPlanes()+(idx % nodeQueue->batchSize)*StateConstants::NB_VALUES_TOTAL());
+            if(idx < nodeQueue->batchSize){ // Buffering currently disabled
+            newState->get_state_planes(true, nodeQueue->getInputPlanes(idx)+(idx % nodeQueue->batchSize)*StateConstants::NB_VALUES_TOTAL());
             nodeQueue->insert(currentNode, newState->side_to_move(), trajectoryBuffer, idx);
             currentNode->enable_node_is_enqueued();
-
+            }
         }
 #endif
 
@@ -381,12 +382,12 @@ void SearchThread::thread_iteration()
 
 void run_search_thread(SearchThread *t)
 {
-    t->set_is_running(true);
+    t->SearchThread::set_is_running(true);
     t->reset_stats();
     while(t->is_running() && t->nodes_limits_ok() && t->is_root_node_unsolved()) {
         t->thread_iteration();
     }
-    t->set_is_running(false);
+    t->SearchThread::set_is_running(false);
 }
 
 

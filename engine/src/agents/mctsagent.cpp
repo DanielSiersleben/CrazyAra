@@ -50,10 +50,12 @@ MCTSAgent::MCTSAgent(NeuralNetAPI *netSingle, vector<unique_ptr<NeuralNetAPI>>& 
     nbNPSentries(0),
     threadManager(nullptr),
     gcThread()
+    #ifdef MPV_MCTS
+    ,largeNetNodeQueue(MPVNodeQueue(searchSettings->largeNetBatchSize, &nodeQueueMutex, &nodeQueueIdx))
+    #endif
 {
     mapWithMutex.hashTable.reserve(1e6);
 #ifdef MPV_MCTS
-    this->largeNetNodeQueue = MPVNodeQueue(searchSettings->largeNetBatchSize, &nodeQueueMutex, &nodeQueueIdx);
     for (auto i = 0; i < searchSettings->threads; ++i) {
         searchThreads.emplace_back(new SearchThread(netBatches[i].get(), searchSettings, &mapWithMutex, &largeNetNodeQueue));
     }
@@ -71,6 +73,9 @@ MCTSAgent::~MCTSAgent()
     for (auto searchThread : searchThreads) {
         delete searchThread;
     }
+#ifdef MPV_MCTS
+    delete &largeNetNodeQueue;
+#endif
 }
 
 Node* MCTSAgent::get_opponents_next_root() const
@@ -197,9 +202,6 @@ void MCTSAgent::create_new_root_node(StateObj* state)
 
 void MCTSAgent::delete_old_tree()
 {
-#ifdef MPV_MCTS
-    largeNetNodeQueue.clear();
-#endif
     // clear all remaining node of the former root node
     delete_subtree_and_hash_entries(rootNode, mapWithMutex.hashTable, gcThread);
     assert(mapWithMutex.hashTable.size() == 0);
@@ -275,10 +277,6 @@ void MCTSAgent::update_stats()
 void MCTSAgent::evaluate_board_state()
 {
     evalInfo->nodesPreSearch = init_root_node(state);
-
-#ifdef MPV_MCTS
-    largeNetNodeQueue.clear();
-#endif
 
     thread tGCThread = thread(run_gc_thread<Node>, &gcThread);
     evalInfo->isChess960 = state->is_chess960();

@@ -25,13 +25,11 @@ void MPVSearchThread::reset_stats()
 
 void MPVSearchThread::create_mpv_mini_batch()
 {
-   if(nodeQueue->batchIdx->load() >= nodeQueue->batchSize){
-       for(size_t i = 0; i < nodeQueue->batchSize; ++i){
+       for(auto i = 0; i < nodeQueue->batchSize; ++i){
            newNodes->add_element(nodeQueue->queue[i]);
            newNodeSideToMove->add_element(nodeQueue->sideToMove[i]);
            newTrajectories.emplace_back(nodeQueue->trajectories[i]);
        }
-   }
 }
 
 void MPVSearchThread::set_nn_results_to_child_nodes()
@@ -47,7 +45,9 @@ void MPVSearchThread::set_nn_results_to_child_nodes()
 
 void MPVSearchThread::thread_iteration()
 {
-    create_mpv_mini_batch();
+    if(nodeQueue->batchIdx->load() > nodeQueue->batchSize){
+        create_mpv_mini_batch();
+    }
     if (newNodes->size() != 0) {
         net->predict(inputPlanes, valueOutputs, probOutputs);
         set_nn_results_to_child_nodes();
@@ -68,21 +68,21 @@ void backup_mpvnet_values(FixedVector<Node*>* nodes, vector<Trajectory>* traject
 
     /*for(size_t idx = 0; idx < nodes->size(); ++idx){
         const Node* node = nodes->get_element(idx);
-        backup_mpv_value(node->get_value(), searchSettings->virtualLoss, trajectories[idx], 0.1*searchSettings->largeNetEvalThreshold);
-    }
-    nodes->reset_idx();
-    trajectories.clear();*/
+        backup_mpv_value(node->get_value(), (*trajectories)[idx], searchSettings->largeNetEvalThreshold);
+    }*/
 }
 
 void MPVSearchThread::backup_value_outputs()
 {
-    atomic_int idx = -1;
-    for(auto i = 0; i < searchSettings->largeNetBackpropThreads; ++i){
-        workerThreads[i] = new thread(backup_mpvnet_values, newNodes.get(), &newTrajectories, &idx, searchSettings);
-    }
+    if(searchSettings->largeNetValueBackprop){
+        atomic_int idx = 0;
+        for(auto i = 0; i < searchSettings->largeNetBackpropThreads; ++i){
+            workerThreads[i] = new thread(backup_mpvnet_values, newNodes.get(), &newTrajectories, &idx, searchSettings);
+        }
 
-    for(auto i = 0; i < searchSettings->largeNetBackpropThreads; ++i){
-        workerThreads[i]->join();
+        for(auto i = 0; i < searchSettings->largeNetBackpropThreads; ++i){
+            workerThreads[i]->join();
+        }
     }
 
     newNodes->reset_idx();
@@ -92,7 +92,7 @@ void MPVSearchThread::backup_value_outputs()
 void MPVSearchThread::set_is_running(bool value)
 {
     isRunning = value;
-    if(value = false){
+    if(value == false){
         deleteWorkerThreads();
     }
 }

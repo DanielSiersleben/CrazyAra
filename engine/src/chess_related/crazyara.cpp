@@ -99,8 +99,7 @@ void CrazyAra::uci_loop(int argc, char *argv[])
     size_t it = 0;
 
 	// this is debug vector which can contain uci commands which will be automatically processed when the executable is launched
-    vector<string> commands = {
-    };
+    vector<string> commands = {};
 
     do {
 
@@ -493,6 +492,7 @@ void CrazyAra::init_search_settings()
     searchSettings.mpvThreads = Options["mpvThreads"] * get_num_gpus(Options);
     searchSettings.largeNetEvalThreshold = Options["largeNetThreshold"];
     searchSettings.largeNetStartPhase = Options["largeNetStartPhase"];
+    searchSettings.largeNetValueBackprop = Options["largeNetValueBackprop"];
 #endif
     searchSettings.batchSize = Options["Batch_Size"];
     searchSettings.useTranspositionTable = Options["Use_Transposition_Table"];

@@ -57,9 +57,10 @@ void OptionsUCI::init(OptionsMap &o)
     o["Threads"]                       << Option(3, 1, 512);
 #ifdef MPV_MCTS
     o["MPVThreads"]                       << Option(1, 1, 512);
-    o["largeNetThreshold"]                       << Option(1000, 10, 999999);
-    o["largeNetBatchSize"]             << Option(64, 1, 8192);
+    o["largeNetThreshold"]                       << Option(10, 10, 999999);
+    o["largeNetBatchSize"]             << Option(16, 1, 8192);
     o["largeNetStartPhase"]            << Option(false);
+    o["largeNetValueBackprop"]         << Option(true);
 #endif
     o["Centi_CPuct_Init"]              << Option(250, 1, 99999);
     o["CPuct_Base"]                    << Option(19652, 1, 99999);
@@ -98,7 +99,7 @@ void OptionsUCI::init(OptionsMap &o)
     o["Nodes"]                         << Option(0, 0, 99999999);
     o["Simulations"]                   << Option(0, 0, 99999999);
 #endif
-    o["Allow_Early_Stopping"]          << Option(true);
+    o["Allow_Early_Stopping"]          << Option(false);
     o["Use_Raw_Network"]               << Option(false);
     o["Enhance_Checks"]                << Option(false);
 //    o["Enhance_Captures"]              << Option(false);         currently disabled
@@ -142,8 +143,8 @@ void OptionsUCI::init(OptionsMap &o)
     o["UCI_Chess960"]                  << Option(true);
 #endif
     o["Random_Playout"]                << Option(false);
-    o["Fixed_Movetime"]                << Option(0, 0, 99999999);
-    o["Reuse_Tree"]                    << Option(true);
+    o["Fixed_Movetime"]                << Option(100, 0, 99999999);
+    o["Reuse_Tree"]                    << Option(false);
 #ifdef MPV_MCTS
     o["largeNetBackpropThreads"]       << Option(2, 2 , 10);
 #endif

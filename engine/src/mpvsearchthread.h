@@ -21,9 +21,9 @@ public:
 
     void backup_value_outputs() override;
 
-    void deleteWorkerThreads();
-
     void set_is_running(bool value) override;
+
+    void deleteWorkerThreads();
 
 private:
     void set_nn_results_to_child_nodes() override;
