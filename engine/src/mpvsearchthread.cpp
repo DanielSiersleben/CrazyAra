@@ -5,12 +5,12 @@
 #ifdef MPV_MCTS
 
 MPVSearchThread::MPVSearchThread(NeuralNetAPI* netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex, MPVNodeQueue *nodeQueue):
-    SearchThread(netBatch, searchSettings, mapWithMutex, nodeQueue)
+    SearchThread(netBatch, searchSettings, mapWithMutex, nodeQueue, true)
 {
-     nodeQueue->setInputPlanes(inputPlanes);
      newNodes = make_unique<FixedVector<Node*>>(searchSettings->largeNetBatchSize);
      newNodeSideToMove = make_unique<FixedVector<SideToMove>>(searchSettings->largeNetBatchSize);
 
+     nodeQueue->setInputPlanesAndBuffer(inputPlanes, inputBuffer);
 }
 
 void MPVSearchThread::reset_stats()
@@ -26,9 +26,9 @@ void MPVSearchThread::reset_stats()
 void MPVSearchThread::create_mpv_mini_batch()
 {
        for(auto i = 0; i < nodeQueue->batchSize; ++i){
-           newNodes->add_element(nodeQueue->queue[i]);
-           newNodeSideToMove->add_element(nodeQueue->sideToMove[i]);
-           newTrajectories.emplace_back(nodeQueue->trajectories[i]);
+           newNodes->add_element(nodeQueue->queueBuffer[i]);
+           newNodeSideToMove->add_element(nodeQueue->sideToMoveBuffer[i]);
+           newTrajectories.emplace_back(nodeQueue->trajectoriesBuffer[i]);
        }
 }
 
@@ -45,15 +45,14 @@ void MPVSearchThread::set_nn_results_to_child_nodes()
 
 void MPVSearchThread::thread_iteration()
 {
-    if(nodeQueue->batchIdx->load() > nodeQueue->batchSize){
+    if(nodeQueue->batch_ready){
         create_mpv_mini_batch();
     }
     if (newNodes->size() != 0) {
-        net->predict(inputPlanes, valueOutputs, probOutputs);
+        net->predict(nodeQueue->getInputBuffer(), valueOutputs, probOutputs);
         set_nn_results_to_child_nodes();
-        nodeQueue->resetIdx();
+        nodeQueue->mark_batch_completed();
         backup_value_outputs();
-
         newNodeSideToMove->reset_idx();
     }
 }

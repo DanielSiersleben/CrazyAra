@@ -10,6 +10,11 @@ struct MPVNodeQueue{
     unique_ptr<Trajectory[]> trajectories;
     int batchSize;
     atomic_int* batchIdx;
+
+    bool batch_ready;
+
+    size_t totalEvals;
+
     mutex* mtx;
     unique_ptr<float[]> inputPlanes;
 
@@ -18,31 +23,39 @@ struct MPVNodeQueue{
     unique_ptr<Node*[]> queueBuffer;
     unique_ptr<SideToMove[]> sideToMoveBuffer;
     unique_ptr<Trajectory[]> trajectoriesBuffer;
-    bool dataBuffered;
 
-    MPVNodeQueue(size_t batchSize, mutex* mtx, atomic_int* idx){
+    MPVNodeQueue(size_t batchSize){
         queue = make_unique<Node*[]>(batchSize);
         sideToMove = make_unique<SideToMove[]>(batchSize);
         trajectories = make_unique<Trajectory[]>(batchSize);
-        this->mtx = mtx;
-        batchIdx = idx;
+        this->mtx = new mutex();
+        batchIdx = new atomic_int(0);
         this->batchSize = batchSize;
+
+        batch_ready = false;
+
+        totalEvals = 0;
+
+        this->inputPlanes = make_unique<float[]>(batchSize * StateConstants::NB_VALUES_TOTAL());
 
         this->inputBuffer = make_unique<float[]>(batchSize * StateConstants::NB_VALUES_TOTAL());
         queueBuffer = make_unique<Node*[]>(batchSize);
         sideToMoveBuffer = make_unique<SideToMove[]>(batchSize);
         trajectoriesBuffer = make_unique<Trajectory[]>(batchSize);
-        dataBuffered = false;
     }
 
+    void mark_batch_completed(){
+        batch_ready = false;
+        totalEvals += batchSize;
 
+    }
 
-    void setInputPlanes(float* iP){
-        this->inputPlanes.reset(iP);
+    void setInputPlanesAndBuffer(float* inputPlanes, float* inputBuffer){
+        this->inputPlanes.reset(inputPlanes);
+        this->inputBuffer.reset(inputBuffer);
     }
 
     void clear(){
-        int currIdx = batchIdx->load();
 
         queue.reset(new Node*[batchSize]);
         sideToMove.reset(new SideToMove[batchSize]);
@@ -50,71 +63,61 @@ struct MPVNodeQueue{
         queueBuffer.reset(new Node*[batchSize]);
         sideToMoveBuffer.reset(new SideToMove[batchSize]);
         trajectoriesBuffer.reset(new Trajectory[batchSize]);
-        inputBuffer.reset(new float[batchSize * StateConstants::NB_VALUES_TOTAL()]);
+
 
         batchIdx->store(0);
-        dataBuffered =  false;
-    }
+        batch_ready = false;
 
-    void resetIdx(){
-        batchIdx->store(0);
-
-        /* Buffering Currently Disabled
-        int currIdx = batchIdx->load();
-        if(currIdx <= batchSize){
-            for(int idx = 0; idx < currIdx; ++idx){
-                    queue[idx]->disable_node_is_enqueued();
-            }
-            batchIdx->store(0);
-        }
-        else{
-            assert(dataBuffered);
-            currIdx -= batchSize;
-            mtx->lock();
-            batchIdx->store(currIdx);
-            std::copy(inputBuffer.get(), inputBuffer.get() + (currIdx-1)*StateConstants::NB_VALUES_TOTAL(), inputPlanes.get());
-            swap(queue, queueBuffer);
-            swap(sideToMove, sideToMoveBuffer);
-            swap(trajectories, trajectoriesBuffer);
-
-            dataBuffered = false;
-            mtx->unlock();
-
-        }*/
+        totalEvals = 0;
     }
 
     int fetch_and_increase_Index(){
-       return batchIdx->fetch_add(1);
+       int tmp = batchIdx->fetch_add(1);
+
+       while (tmp >= batchSize) {
+           // wait till Buffer is swapped
+           tmp = batchIdx->fetch_add(1);
+       }
+
+       return tmp;
     }
 
     void insert(Node* node, SideToMove side, Trajectory trajectory, int index){
         trajectory.pop_back();
-        if(index < batchSize){
-            this->queue[index] = node;
-            this->sideToMove[index] = side;
-            this->trajectories[index] = trajectory;
-        }
-        else{
-            this->queueBuffer[index % batchSize] = node;
-            this->sideToMoveBuffer[index % batchSize] = side;
-            this->trajectoriesBuffer[index % batchSize] = trajectory;
-            mtx->unlock();
+
+        this->queue[index] = node;
+        this->sideToMove[index] = side;
+        this->trajectories[index] = trajectory;
+
+        if(index == batchSize-1){
+            // swap pointer of Buffer and Planes
+            swapBuffer();
         }
     }
 
-    float* getInputPlanes(int idx){
-        return inputPlanes.get();
+    void swapBuffer(){
+        // make sure Buffer is already completed
+        assert(batch_ready == false);
 
-        //currently disabled Buffering
-        if(idx >= batchSize){
-            dataBuffered = true;
-            cout << "buffering" << endl;
-            // make sure that buffer isnt swapped while not finished
-            return inputBuffer.get();
-        }
-        else{
-            return inputPlanes.get();
-        }
+        queue.swap(queueBuffer);
+        sideToMove.swap(sideToMoveBuffer);
+        trajectories.swap(trajectoriesBuffer);
+        inputPlanes.swap(inputBuffer);
+        batchIdx->store(0);
+        batch_ready = true;
+    }
+
+    // returns the completed Buffer
+    float* getInputBuffer(){
+        return inputBuffer.get();
+    }
+
+    float* getInputPlanes(){
+        return inputPlanes.get();
+    }
+
+    size_t getLargeNetEvals(){
+        return totalEvals;
     }
 };
 

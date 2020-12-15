@@ -51,7 +51,7 @@ MCTSAgent::MCTSAgent(NeuralNetAPI *netSingle, vector<unique_ptr<NeuralNetAPI>>& 
     threadManager(nullptr),
     gcThread()
     #ifdef MPV_MCTS
-    ,largeNetNodeQueue(MPVNodeQueue(searchSettings->largeNetBatchSize, &nodeQueueMutex, &nodeQueueIdx))
+    ,largeNetNodeQueue(MPVNodeQueue(searchSettings->largeNetBatchSize))
     #endif
 {
     mapWithMutex.hashTable.reserve(1e6);
@@ -351,6 +351,7 @@ void MCTSAgent::run_mcts_search()
     tManager->join();
     delete[] threads;
     isRunning = false;
+    cout << "total largeNet evals: " << largeNetNodeQueue.getLargeNetEvals() << ", batch_size: " << largeNetNodeQueue.batchSize << endl;
 }
 
 void MCTSAgent::stop()

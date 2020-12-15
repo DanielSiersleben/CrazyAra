@@ -41,8 +41,8 @@ size_t SearchThread::get_max_depth() const
 }
 
 #ifdef MPV_MCTS
-SearchThread::SearchThread(NeuralNetAPI *netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex, MPVNodeQueue *nodeQueue):
-    NeuralNetAPIUser(netBatch),
+SearchThread::SearchThread(NeuralNetAPI *netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex, MPVNodeQueue *nodeQueue, bool isMPV_thread):
+    NeuralNetAPIUser(netBatch, isMPV_thread),
     isRunning(false), mapWithMutex(mapWithMutex), searchSettings(searchSettings)
 {
     this->nodeQueue = nodeQueue;
@@ -198,7 +198,7 @@ Node* SearchThread::get_new_child_to_evaluate(ChildIdx& childIdx, NodeDescriptio
         {
             int idx = nodeQueue->fetch_and_increase_Index();
             if(idx < nodeQueue->batchSize){ // Buffering currently disabled
-            newState->get_state_planes(true, nodeQueue->getInputPlanes(idx)+(idx % nodeQueue->batchSize)*StateConstants::NB_VALUES_TOTAL());
+            newState->get_state_planes(true, nodeQueue->getInputPlanes()+idx*StateConstants::NB_VALUES_TOTAL());
             nodeQueue->insert(currentNode, newState->side_to_move(), trajectoryBuffer, idx);
             currentNode->enable_node_is_enqueued();
             }

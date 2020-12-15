@@ -56,9 +56,9 @@ void OptionsUCI::init(OptionsMap &o)
 #endif
     o["Threads"]                       << Option(3, 1, 512);
 #ifdef MPV_MCTS
-    o["MPVThreads"]                       << Option(1, 1, 512);
-    o["largeNetThreshold"]                       << Option(10, 10, 999999);
-    o["largeNetBatchSize"]             << Option(16, 1, 8192);
+    o["MPVThreads"]                    << Option(1, 1, 512);
+    o["largeNetThreshold"]             << Option(10, 10, 999999);
+    o["largeNetBatchSize"]             << Option(64, 1, 8192);
     o["largeNetStartPhase"]            << Option(false);
     o["largeNetValueBackprop"]         << Option(true);
 #endif
@@ -109,8 +109,8 @@ void OptionsUCI::init(OptionsMap &o)
     o["Precision"]                     << Option("float16", {"float32", "float16", "int8"});
 #endif
 #ifdef MPV_MCTS
-    o["Small_Model_Directory"]               << Option("model/small_net");
-    o["Large_Model_Directory"]               << Option("model/large_net");
+    o["Small_Model_Directory"]         << Option("model/small_net");
+    o["Large_Model_Directory"]         << Option("model/large_net");
 #elif MODE_CRAZYHOUSE
     o["Model_Directory"]               << Option("model/small_net");
 #else
@@ -137,13 +137,13 @@ void OptionsUCI::init(OptionsMap &o)
     o["Centi_Random_Move_Factor"]      << Option(0, 0, 99);
     o["SyzygyPath"]                    << Option("<empty>");
     o["Log_File"]                      << Option("", on_logger);
-    o["Use_NPS_Time_Manager"]          << Option(false);
+    o["Use_NPS_Time_Manager"]          << Option(true);
     o["Use_Advantage"]                 << Option(false);
 #ifdef SUPPORT960
     o["UCI_Chess960"]                  << Option(true);
 #endif
     o["Random_Playout"]                << Option(false);
-    o["Fixed_Movetime"]                << Option(100, 0, 99999999);
+    o["Fixed_Movetime"]                << Option(0, 0, 99999999);
     o["Reuse_Tree"]                    << Option(false);
 #ifdef MPV_MCTS
     o["largeNetBackpropThreads"]       << Option(2, 2 , 10);

@@ -31,7 +31,7 @@
 #include "common.h"
 #endif
 
-NeuralNetAPIUser::NeuralNetAPIUser(NeuralNetAPI *net):
+NeuralNetAPIUser::NeuralNetAPIUser(NeuralNetAPI *net, bool allocate_inputBuffer):
     net(net)
 {
     // allocate memory for all predictions and results
@@ -39,10 +39,13 @@ NeuralNetAPIUser::NeuralNetAPIUser(NeuralNetAPI *net):
     CHECK(cudaMallocHost((void**) &inputPlanes, net->get_batch_size() * StateConstants::NB_VALUES_TOTAL() * sizeof(float)));
     CHECK(cudaMallocHost((void**) &valueOutputs, net->get_batch_size() * sizeof(float)));
     CHECK(cudaMallocHost((void**) &probOutputs, net->get_policy_output_length() * sizeof(float)));
+    if(allocate_inputBuffer) CHECK(cudaMallocHost((void**) &inputBuffer, net->get_batch_size() * StateConstants::NB_VALUES_TOTAL() * sizeof(float)));
+
 #else
     inputPlanes = new float[net->get_batch_size() * StateConstants::NB_VALUES_TOTAL()];
     valueOutputs = new float[net->get_batch_size()];
     probOutputs = new float[net->get_policy_output_length()];
+    if(allocate_inputBuffer) inputBuffer = new float[net->get_batch_size() * StateConstants::NB_VALUES_TOTAL()];
 #endif
 }
 
@@ -52,9 +55,11 @@ NeuralNetAPIUser::~NeuralNetAPIUser()
     CHECK(cudaFreeHost(inputPlanes));
     CHECK(cudaFreeHost(valueOutputs));
     CHECK(cudaFreeHost(probOutputs));
+    CHECK(cudaFreeHost(inputBuffer));
 #else
     delete [] inputPlanes;
     delete [] valueOutputs;
     delete [] probOutputs;
+    delete [] inputPlanes;
 #endif
 }

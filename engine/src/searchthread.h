@@ -93,7 +93,6 @@ protected:
     size_t visitsPreSearch;
 
 #ifdef MPV_MCTS
-    float* largeNetInputPlanes;
     MPVNodeQueue *nodeQueue;
 #endif
 
@@ -105,7 +104,7 @@ public:
      * @param MapWithMutex Handle to the hash table
      */
 #ifdef MPV_MCTS
-    SearchThread(NeuralNetAPI* netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex, MPVNodeQueue *nodeQueue);
+    SearchThread(NeuralNetAPI* netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex, MPVNodeQueue *nodeQueue, bool isMPV_thread = false);
 #else
     SearchThread(NeuralNetAPI* netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex);
 #endif
