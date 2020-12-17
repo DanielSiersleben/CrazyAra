@@ -41,7 +41,10 @@ protected:
 
     // inputPlanes stores the plane representation of all newly expanded nodes of a single mini-batch
     float* inputPlanes;
+
     float* inputBuffer;
+    bool allocate_inputBuffer;
+
     // stores the corresponding value-Outputs and probability-Outputs of the nodes stored in the vector "newNodes"
     // sufficient memory according to the batch-size will be allocated in the constructor
     float* valueOutputs;

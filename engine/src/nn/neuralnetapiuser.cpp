@@ -32,7 +32,8 @@
 #endif
 
 NeuralNetAPIUser::NeuralNetAPIUser(NeuralNetAPI *net, bool allocate_inputBuffer):
-    net(net)
+    net(net),
+    allocate_inputBuffer(allocate_inputBuffer)
 {
     // allocate memory for all predictions and results
 #ifdef TENSORRT
@@ -55,11 +56,11 @@ NeuralNetAPIUser::~NeuralNetAPIUser()
     CHECK(cudaFreeHost(inputPlanes));
     CHECK(cudaFreeHost(valueOutputs));
     CHECK(cudaFreeHost(probOutputs));
-    CHECK(cudaFreeHost(inputBuffer));
+    if(allocate_inputBuffer) CHECK(cudaFreeHost(inputBuffer));
 #else
     delete [] inputPlanes;
     delete [] valueOutputs;
     delete [] probOutputs;
-    delete [] inputPlanes;
+    if(allocate_inputBuffer) delete [] inputBuffer;
 #endif
 }

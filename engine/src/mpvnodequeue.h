@@ -4,44 +4,64 @@
 #include "node.h"
 #include "atomic"
 
-struct MPVNodeQueue{
+class MPVNodeQueue{
+private:
     unique_ptr<Node*[]> queue;
     unique_ptr<SideToMove[]> sideToMove;
     unique_ptr<Trajectory[]> trajectories;
+
     int batchSize;
+
     atomic_int* batchIdx;
+    mutex mtx;
 
     bool batch_ready;
 
     size_t totalEvals;
 
-    mutex* mtx;
-    unique_ptr<float[]> inputPlanes;
+    float* inputPlanes;
 
     // store nodes here while inputPlanes is processed by GPU
-    unique_ptr<float[]> inputBuffer;
+    float* inputBuffer;
     unique_ptr<Node*[]> queueBuffer;
     unique_ptr<SideToMove[]> sideToMoveBuffer;
     unique_ptr<Trajectory[]> trajectoriesBuffer;
 
+public:
     MPVNodeQueue(size_t batchSize){
         queue = make_unique<Node*[]>(batchSize);
         sideToMove = make_unique<SideToMove[]>(batchSize);
         trajectories = make_unique<Trajectory[]>(batchSize);
-        this->mtx = new mutex();
-        batchIdx = new atomic_int(0);
-        this->batchSize = batchSize;
 
+        batchIdx = new atomic_int(0);
+
+        this->batchSize = batchSize;
         batch_ready = false;
 
         totalEvals = 0;
 
-        this->inputPlanes = make_unique<float[]>(batchSize * StateConstants::NB_VALUES_TOTAL());
-
-        this->inputBuffer = make_unique<float[]>(batchSize * StateConstants::NB_VALUES_TOTAL());
         queueBuffer = make_unique<Node*[]>(batchSize);
         sideToMoveBuffer = make_unique<SideToMove[]>(batchSize);
         trajectoriesBuffer = make_unique<Trajectory[]>(batchSize);
+    }
+    ~MPVNodeQueue(){
+
+    }
+
+    Node** getQueue(){
+        return queueBuffer.get();
+    }
+
+    SideToMove* getSideToMove(){
+        return sideToMoveBuffer.get();
+    }
+
+    Trajectory* getTrajectories(){
+        return trajectoriesBuffer.get();
+    }
+
+    bool batch_is_ready(){
+        return batch_ready;
     }
 
     void mark_batch_completed(){
@@ -51,24 +71,42 @@ struct MPVNodeQueue{
     }
 
     void setInputPlanesAndBuffer(float* inputPlanes, float* inputBuffer){
-        this->inputPlanes.reset(inputPlanes);
-        this->inputBuffer.reset(inputBuffer);
+        this->inputPlanes = (inputPlanes);
+        this->inputBuffer = (inputBuffer);
     }
 
     void clear(){
-
+        /*
         queue.reset(new Node*[batchSize]);
         sideToMove.reset(new SideToMove[batchSize]);
         trajectories.reset(new Trajectory[batchSize]);
         queueBuffer.reset(new Node*[batchSize]);
         sideToMoveBuffer.reset(new SideToMove[batchSize]);
-        trajectoriesBuffer.reset(new Trajectory[batchSize]);
-
+        trajectoriesBuffer.reset(new Trajectory[batchSize]);*/
 
         batchIdx->store(0);
         batch_ready = false;
 
         totalEvals = 0;
+    }
+
+    void mark_nodes_as_dequeued(){
+        int lastIdx = batchIdx->load();
+        Node** curr = &queue[0];
+        Node** last = &queue[lastIdx];
+
+        while(curr != last){
+            (*curr)->disable_node_is_enqueued();
+            curr++;
+        }
+        if(batch_ready){
+            curr = &queue[0];
+            last = &queue[batchSize];
+            while(curr != last){
+                (*curr)->disable_node_is_enqueued();
+                curr++;
+            }
+        }
     }
 
     int fetch_and_increase_Index(){
@@ -82,8 +120,7 @@ struct MPVNodeQueue{
        return tmp;
     }
 
-    void insert(Node* node, SideToMove side, Trajectory trajectory, int index){
-        trajectory.pop_back();
+    void insert(Node* node, SideToMove side, const Trajectory& trajectory, int index){
 
         this->queue[index] = node;
         this->sideToMove[index] = side;
@@ -91,7 +128,9 @@ struct MPVNodeQueue{
 
         if(index == batchSize-1){
             // swap pointer of Buffer and Planes
+            this->lock();
             swapBuffer();
+            this->unlock();
         }
     }
 
@@ -99,25 +138,34 @@ struct MPVNodeQueue{
         // make sure Buffer is already completed
         assert(batch_ready == false);
 
+        float* tmp = inputPlanes;
+        inputPlanes = inputBuffer;
+        inputBuffer = tmp;
+
         queue.swap(queueBuffer);
         sideToMove.swap(sideToMoveBuffer);
         trajectories.swap(trajectoriesBuffer);
-        inputPlanes.swap(inputBuffer);
         batchIdx->store(0);
         batch_ready = true;
     }
 
-    // returns the completed Buffer
     float* getInputBuffer(){
-        return inputBuffer.get();
+        return inputBuffer;
     }
 
     float* getInputPlanes(){
-        return inputPlanes.get();
+        return inputPlanes;
     }
 
     size_t getLargeNetEvals(){
         return totalEvals;
+    }
+
+    void lock(){
+        mtx.lock();
+    }
+    void unlock(){
+        mtx.unlock();
     }
 };
 

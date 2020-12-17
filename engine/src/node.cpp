@@ -596,29 +596,44 @@ uint32_t Node::get_real_visits(ChildIdx childIdx) const
 }
 
 #ifdef MPV_MCTS
-void backup_mpv_value(float value, Trajectory trajectory, size_t valueFactor){
+void backup_mpv_value(float value, const Trajectory& trajectory, size_t valueFactor, bool resetQval){
     for (auto it = trajectory.rbegin(); it != trajectory.rend(); ++it) {
 #ifndef MODE_POMMERMAN
         value = -value;
 #endif
-        it->node->update_value_mpv(it->childIdx, value, valueFactor);
+        it->node->update_value_mpv(it->childIdx, value, valueFactor, resetQval);
     }
 }
-void Node::update_value_mpv(ChildIdx childIdx, float value, int valueFactor)
+void Node::update_value_mpv(ChildIdx childIdx, float value, int valueFactor, bool resetQval)
 {
 
     lock();
 
-    valueSum = (double(valueSum * (realVisitsSum) + (value * valueFactor * valueFactor))/(realVisitsSum + valueFactor));
-    //realVisitsSum += valueFactor;
+    if (resetQval) {
+        valueSum = 0;
+        realVisitsSum = 0;
+        d->qValues[childIdx] = value * valueFactor;
+        d->childNumberVisits[childIdx] = valueFactor;
 
-        // revert virtual loss and update the Q-value
+        for (auto qValue : d->qValues){
+            valueSum += qValue;
+        }
+
+        for (auto visits : d->childNumberVisits){
+            realVisitsSum += visits;
+        }
+    }
+
+    else {
+        // weight new value Sum (value * valueFactor) with new visitSum (valueFactor) and old valueSum with realVisitsSum
+        valueSum = (double(valueSum * (realVisitsSum) + (value * valueFactor * valueFactor))/(realVisitsSum + valueFactor));
+
         assert(d->childNumberVisits[childIdx] != 0);
         d->qValues[childIdx] = (double(d->qValues[childIdx]) * d->childNumberVisits[childIdx] + (value * valueFactor)) / (d->childNumberVisits[childIdx] + valueFactor);
         assert(!isnan(d->qValues[childIdx]));
+    }
 
-       // d->childNumberVisits[childIdx] -= - valueFactor;
-       // d->visitSum -= - valueFactor;
+
 
     unlock();
 }
@@ -1155,8 +1170,13 @@ float get_current_cput(float visits, const SearchSettings* searchSettings)
 
 void Node::print_node_statistics(const StateObj* state) const
 {
+#ifdef MPV_MCTS
+    const string header = "  #  | Move  |    Visits    |  Policy   |  Q-values  |  CP   |    Type    | largeNet eval";
+    const string filler = "-----+-------+--------------+-----------+------------+-------+------------+--------------";
+#else
     const string header = "  #  | Move  |    Visits    |  Policy   |  Q-values  |  CP   |    Type    ";
     const string filler = "-----+-------+--------------+-----------+------------+-------+------------";
+#endif
     cout << header << endl
          << std::showpoint << std::fixed << std::setprecision(7) // << std::noshowpcout
          << filler << endl;
@@ -1187,6 +1207,9 @@ void Node::print_node_statistics(const StateObj* state) const
         else {
             cout << setfill(' ') << setw(9) << node_type_to_string(UNSOLVED);
         }
+#ifdef MPV_MCTS
+        cout << "  | " << (d->childNodes[childIdx]->hasLargeNNResults ? "true" : "false");
+#endif
         cout << endl;
     }
     cout << filler << endl

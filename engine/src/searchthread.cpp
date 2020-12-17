@@ -196,12 +196,21 @@ Node* SearchThread::get_new_child_to_evaluate(ChildIdx& childIdx, NodeDescriptio
 #ifdef MPV_MCTS
         if(currentNode->get_real_visits() >= searchSettings->largeNetEvalThreshold && !currentNode->evaluatedByLargeNet())
         {
-            int idx = nodeQueue->fetch_and_increase_Index();
-            if(idx < nodeQueue->batchSize){ // Buffering currently disabled
-            newState->get_state_planes(true, nodeQueue->getInputPlanes()+idx*StateConstants::NB_VALUES_TOTAL());
-            nodeQueue->insert(currentNode, newState->side_to_move(), trajectoryBuffer, idx);
             currentNode->enable_node_is_enqueued();
+            for(auto it = trajectoryBuffer.begin()+1; it != trajectoryBuffer.end(); ++it){
+                if(it->node->is_terminal()){
+                    cout << "error" << endl;
+                }
             }
+
+            int idx = nodeQueue->fetch_and_increase_Index();
+            newState->get_state_planes(true, nodeQueue->getInputPlanes()+idx*StateConstants::NB_VALUES_TOTAL());
+
+            Trajectory tmp = trajectoryBuffer;
+            // pop last elem (not part of trajectory)
+            tmp.pop_back();
+
+            nodeQueue->insert(currentNode, newState->side_to_move(), tmp, idx);
         }
 #endif
 
@@ -387,7 +396,7 @@ void run_search_thread(SearchThread *t)
     while(t->is_running() && t->nodes_limits_ok() && t->is_root_node_unsolved()) {
         t->thread_iteration();
     }
-    t->SearchThread::set_is_running(false);
+    t->set_is_running(false);
 }
 
 

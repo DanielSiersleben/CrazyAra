@@ -204,7 +204,7 @@ public:
     }
 
 #ifdef MPV_MCTS
-    void update_value_mpv(ChildIdx childIdx, float valueSum, int valueFactor);
+    void update_value_mpv(ChildIdx childIdx, float valueSum, int valueFactor, bool resetQval);
 #endif
 
     /**
@@ -308,6 +308,19 @@ public:
     void enhance_moves(const SearchSettings* searchSettings);
 
     void set_value(float valueSum);
+#ifdef MPV_MCTS
+    template<bool soft_reset>
+    void set_mpv_value(float value, size_t valueFactor)
+    {
+        if (soft_reset){
+            this->valueSum = value * valueFactor;
+            this->realVisitsSum = valueFactor;
+        }
+        else{
+            this->valueSum = (double(valueSum * (realVisitsSum) + (value * valueFactor * valueFactor))/(realVisitsSum + valueFactor));
+        }
+    };
+#endif
     uint16_t main_child_idx_for_parent() const;
 
     void add_new_child_node(Node* newNode, ChildIdx childIdx);
@@ -786,7 +799,7 @@ void backup_value(float value, float virtualLoss, const Trajectory& trajectory, 
     }
 }
 #ifdef MPV_MCTS
-void backup_mpv_value(float value, Trajectory trajectory, size_t valueFactor);
+void backup_mpv_value(float value, const Trajectory& trajectory, size_t valueFactor, bool resetQval);
 #endif
 
 

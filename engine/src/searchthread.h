@@ -105,6 +105,7 @@ public:
      */
 #ifdef MPV_MCTS
     SearchThread(NeuralNetAPI* netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex, MPVNodeQueue *nodeQueue, bool isMPV_thread = false);
+    virtual ~SearchThread() = default;
 #else
     SearchThread(NeuralNetAPI* netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex);
 #endif
@@ -161,7 +162,7 @@ public:
     /**
      * @brief reset_tb_hits Sets the number of table hits to 0
      */
-    virtual void reset_stats();
+    void reset_stats();
 
     void run_worker_backprop();
 

@@ -73,9 +73,6 @@ MCTSAgent::~MCTSAgent()
     for (auto searchThread : searchThreads) {
         delete searchThread;
     }
-#ifdef MPV_MCTS
-    delete &largeNetNodeQueue;
-#endif
 }
 
 Node* MCTSAgent::get_opponents_next_root() const
@@ -255,6 +252,9 @@ void MCTSAgent::clear_game_history()
     lastValueEval = -1.0f;
     nbNPSentries = 0;
     overallNPS = 0;
+#ifdef MPV_MCTS
+    largeNetNodeQueue.clear();
+#endif
 }
 
 bool MCTSAgent::is_policy_map()
@@ -312,6 +312,7 @@ void MCTSAgent::run_mcts_search()
 {
     int totalThreads;
 #ifdef MPV_MCTS
+    largeNetNodeQueue.clear();
     totalThreads = searchSettings->threads + searchSettings->mpvThreads;
 #else
     totalThreads = searchSettings->threads;
@@ -323,9 +324,11 @@ void MCTSAgent::run_mcts_search()
         searchThreads[i]->set_root_node(rootNode);
         searchThreads[i]->set_root_state(rootState);
         searchThreads[i]->set_search_limits(searchLimits);
+
         if(searchSettings->largeNetStartPhase){
             searchThreads[i]->SearchThread::thread_iteration();
         }
+
         threads[i] = new thread(run_search_thread, searchThreads[i]);
     }
 #endif
@@ -351,7 +354,7 @@ void MCTSAgent::run_mcts_search()
     tManager->join();
     delete[] threads;
     isRunning = false;
-    cout << "total largeNet evals: " << largeNetNodeQueue.getLargeNetEvals() << ", batch_size: " << largeNetNodeQueue.batchSize << endl;
+    cout << "total largeNet evals: " << largeNetNodeQueue.getLargeNetEvals() << endl;
 }
 
 void MCTSAgent::stop()
@@ -369,6 +372,9 @@ void MCTSAgent::print_root_node()
         return;
     }
     rootNode->print_node_statistics(rootState);
+#ifdef MPV_MCTS
+             cout << "largeNet evals:\t" << largeNetNodeQueue.getLargeNetEvals() << endl;
+#endif
 }
 
 void print_child_nodes_to_file(const Node* parentNode, StateObj* state, size_t parentId, size_t& nodeId, ostream& outFile, size_t depth, size_t maxDepth)
