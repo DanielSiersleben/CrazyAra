@@ -13,7 +13,8 @@ private:
     int batchSize;
 
     atomic_int* batchIdx;
-    mutex mtx;
+    atomic_int* completedIdx;
+    mutex* mtx;
 
     bool batch_ready;
 
@@ -34,6 +35,8 @@ public:
         trajectories = make_unique<Trajectory[]>(batchSize);
 
         batchIdx = new atomic_int(0);
+        completedIdx = new atomic_int(0);
+        mtx = new mutex();
 
         this->batchSize = batchSize;
         batch_ready = false;
@@ -45,7 +48,9 @@ public:
         trajectoriesBuffer = make_unique<Trajectory[]>(batchSize);
     }
     ~MPVNodeQueue(){
-
+        delete mtx;
+        delete batchIdx;
+        delete completedIdx;
     }
 
     Node** getQueue(){
@@ -85,6 +90,7 @@ public:
         trajectoriesBuffer.reset(new Trajectory[batchSize]);*/
 
         batchIdx->store(0);
+        completedIdx->store(0);
         batch_ready = false;
 
         totalEvals = 0;
@@ -126,7 +132,10 @@ public:
         this->sideToMove[index] = side;
         this->trajectories[index] = trajectory;
 
+        completedIdx->fetch_add(1);
+
         if(index == batchSize-1){
+            while(completedIdx->load() != batchSize){}
             // swap pointer of Buffer and Planes
             this->lock();
             swapBuffer();
@@ -146,6 +155,7 @@ public:
         sideToMove.swap(sideToMoveBuffer);
         trajectories.swap(trajectoriesBuffer);
         batchIdx->store(0);
+        completedIdx->store(0);
         batch_ready = true;
     }
 
@@ -162,10 +172,10 @@ public:
     }
 
     void lock(){
-        mtx.lock();
+        mtx->lock();
     }
     void unlock(){
-        mtx.unlock();
+        mtx->unlock();
     }
 };
 

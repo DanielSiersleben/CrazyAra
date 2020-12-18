@@ -88,8 +88,6 @@ protected:
     GCThread<Node> gcThread;
 
 #ifdef MPV_MCTS
-    atomic_int nodeQueueIdx;
-    mutex nodeQueueMutex;
     MPVNodeQueue largeNetNodeQueue;
 #endif
 

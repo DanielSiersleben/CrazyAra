@@ -197,11 +197,6 @@ Node* SearchThread::get_new_child_to_evaluate(ChildIdx& childIdx, NodeDescriptio
         if(currentNode->get_real_visits() >= searchSettings->largeNetEvalThreshold && !currentNode->evaluatedByLargeNet())
         {
             currentNode->enable_node_is_enqueued();
-            for(auto it = trajectoryBuffer.begin()+1; it != trajectoryBuffer.end(); ++it){
-                if(it->node->is_terminal()){
-                    cout << "error" << endl;
-                }
-            }
 
             int idx = nodeQueue->fetch_and_increase_Index();
             newState->get_state_planes(true, nodeQueue->getInputPlanes()+idx*StateConstants::NB_VALUES_TOTAL());

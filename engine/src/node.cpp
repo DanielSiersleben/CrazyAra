@@ -1183,9 +1183,17 @@ void Node::print_node_statistics(const StateObj* state) const
     for (size_t childIdx = 0; childIdx < get_number_child_nodes(); ++childIdx) {
         size_t n = 0;
         float q = Q_INIT;
+#ifdef MPV_MCTS
+        bool lv = false;
+#endif
         if (childIdx < d->noVisitIdx) {
             n = d->childNumberVisits[childIdx];
             q = d->qValues[childIdx];
+#ifdef MPV_MCTS
+            if(d->childNodes[childIdx] != nullptr){
+                lv = d->childNodes[childIdx]->has_large_nn_results();
+            }
+#endif
         }
 
         const Action move = get_legal_actions()[childIdx];
@@ -1207,8 +1215,8 @@ void Node::print_node_statistics(const StateObj* state) const
         else {
             cout << setfill(' ') << setw(9) << node_type_to_string(UNSOLVED);
         }
-#ifdef MPV_MCTS
-        cout << "  | " << (d->childNodes[childIdx]->hasLargeNNResults ? "true" : "false");
+#ifdef MPV_MCTS       
+        cout << "  | " << (lv ? "true" : "false");
 #endif
         cout << endl;
     }
