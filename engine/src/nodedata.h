@@ -60,6 +60,11 @@ struct NodeData
 {
     DynamicVector<uint32_t> childNumberVisits;
     DynamicVector<float> qValues;
+#ifdef MPV_MCTS
+    DynamicVector<uint32_t> childNumberLargeNetVisits;
+    DynamicVector<float> qValuesLarge;
+    DynamicVector<float> qValuesSmall;
+#endif
     vector<Node*> childNodes;
     DynamicVector<uint8_t> virtualLossCounter;
     DynamicVector<NodeType> nodeTypes;

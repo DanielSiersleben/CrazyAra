@@ -32,8 +32,6 @@ SearchSettings::SearchSettings():
         largeNetBatchSize(64),
         largeNetBackpropThreads(1),
         largeNetStartPhase(true),
-        largeNetValueBackprop(true),
-        resetQVal(false),
     #endif
         threads(2),
         batchSize(2),

@@ -31,6 +31,11 @@ void NodeData::add_empty_node()
 {
     append(childNumberVisits, 0U);
     append(qValues, Q_INIT);
+#ifdef MPV_MCTS
+    append(childNumberLargeNetVisits, 0U);
+    append(qValuesLarge, Q_INIT);
+    append(qValuesSmall, Q_INIT);
+#endif
     append(virtualLossCounter, uint8_t(0));
     append(nodeTypes, UNSOLVED);
     childNodes.emplace_back(nullptr);
@@ -47,6 +52,11 @@ void NodeData::reserve_initial_space()
     // u: exploration metric for each child node
     // (the q and u values are stacked into 1 list in order to speed-up the argmax() operation
     qValues.reserve(initSize);
+#ifdef MPV_MCTS
+    childNumberLargeNetVisits.reserve(initSize);
+    qValuesLarge.reserve(initSize);
+    qValuesSmall.reserve(initSize);
+#endif
 
     childNodes.reserve(initSize);
     virtualLossCounter.reserve(initSize);

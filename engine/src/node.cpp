@@ -93,6 +93,9 @@ Node::Node(StateObj* state, bool inCheck, const SearchSettings* searchSettings):
 #ifdef MPV_MCTS
     hasLargeNNResults(false),
     enqueued(false),
+    valueSumSmall(0),
+    valueSumLarge(0),
+    realLargeNetVisitsSum(0),
 #endif
     legalActions(state->legal_actions()),
     key(state->hash_key()),
@@ -479,7 +482,10 @@ void Node::apply_virtual_loss_to_child(ChildIdx childIdx, float virtualLoss)
     // make it look like if one has lost X games from this node forward where X is the virtual loss value
     // temporarily reduce the attraction of this node by applying a virtual loss /
     // the effect of virtual loss will be undone if the playout is over
+
+
     d->qValues[childIdx] = (double(d->qValues[childIdx]) * d->childNumberVisits[childIdx] - virtualLoss) / (d->childNumberVisits[childIdx] + virtualLoss);
+
     // virtual increase the number of visits
     d->childNumberVisits[childIdx] += size_t(virtualLoss);
     d->visitSum += virtualLoss;
@@ -489,6 +495,7 @@ void Node::apply_virtual_loss_to_child(ChildIdx childIdx, float virtualLoss)
 
 float Node::get_q_value(ChildIdx childIdx) const
 {
+
     return d->qValues[childIdx];
 }
 
@@ -522,6 +529,10 @@ void Node::reserve_full_memory()
     const size_t numberChildNodes = get_number_child_nodes();
     d->childNumberVisits.reserve(numberChildNodes);
     d->qValues.reserve(numberChildNodes);
+#ifdef MPV_MCTS
+    d->qValuesSmall.reserve(numberChildNodes);
+    d->qValuesLarge.reserve(numberChildNodes);
+#endif
     d->childNodes.reserve(numberChildNodes);
     d->virtualLossCounter.reserve(numberChildNodes);
     d->nodeTypes.reserve(numberChildNodes);
@@ -553,8 +564,18 @@ void Node::fully_expand_node()
 
 float Node::get_value() const
 {
+#ifdef MPV_MCTS
+    return valueSumSmall / realVisitsSum;
+#endif
     return valueSum / realVisitsSum;
 }
+
+#ifdef MPV_MCTS
+float Node::get_large_net_value() const
+{
+    return valueSumLarge / realLargeNetVisitsSum;
+}
+#endif
 
 double Node::get_value_sum() const
 {
@@ -595,50 +616,6 @@ uint32_t Node::get_real_visits(ChildIdx childIdx) const
     return d->childNumberVisits[childIdx] - d->virtualLossCounter[childIdx];
 }
 
-#ifdef MPV_MCTS
-void backup_mpv_value(float value, const Trajectory& trajectory, size_t valueFactor, bool resetQval){
-    for (auto it = trajectory.rbegin(); it != trajectory.rend(); ++it) {
-#ifndef MODE_POMMERMAN
-        value = -value;
-#endif
-        it->node->update_value_mpv(it->childIdx, value, valueFactor, resetQval);
-    }
-}
-void Node::update_value_mpv(ChildIdx childIdx, float value, int valueFactor, bool resetQval)
-{
-
-    lock();
-
-    if (resetQval) {
-        valueSum = 0;
-        realVisitsSum = 0;
-        d->qValues[childIdx] = value * valueFactor;
-        d->childNumberVisits[childIdx] = valueFactor;
-
-        for (auto qValue : d->qValues){
-            valueSum += qValue;
-        }
-
-        for (auto visits : d->childNumberVisits){
-            realVisitsSum += visits;
-        }
-    }
-
-    else {
-        // weight new value Sum (value * valueFactor) with new visitSum (valueFactor) and old valueSum with realVisitsSum
-        valueSum = (double(valueSum * (realVisitsSum) + (value * valueFactor * valueFactor))/(realVisitsSum + valueFactor));
-
-        assert(d->childNumberVisits[childIdx] != 0);
-        d->qValues[childIdx] = (double(d->qValues[childIdx]) * d->childNumberVisits[childIdx] + (value * valueFactor)) / (d->childNumberVisits[childIdx] + valueFactor);
-        assert(!isnan(d->qValues[childIdx]));
-    }
-
-
-
-    unlock();
-}
-#endif
-
 void backup_collision(float virtualLoss, const Trajectory& trajectory) {
     for (auto it = trajectory.rbegin(); it != trajectory.rend(); ++it) {
         it->node->revert_virtual_loss(it->childIdx, virtualLoss);
@@ -648,8 +625,11 @@ void backup_collision(float virtualLoss, const Trajectory& trajectory) {
 void Node::revert_virtual_loss(ChildIdx childIdx, float virtualLoss)
 {
     lock();
+
     d->qValues[childIdx] = (double(d->qValues[childIdx]) * d->childNumberVisits[childIdx] + virtualLoss) / (d->childNumberVisits[childIdx] - virtualLoss);
+
     d->childNumberVisits[childIdx] -= virtualLoss;
+
     d->visitSum -= virtualLoss;
     // decrement virtual loss counter
     update_virtual_loss_counter<false>(childIdx);
@@ -694,8 +674,19 @@ DynamicVector<float>& Node::get_policy_prob_small()
 void Node::set_value(float value)
 {
     ++this->realVisitsSum;
+#ifdef MPV_MCTS
+    this->valueSumSmall = value * this->realVisitsSum;
+#endif
     this->valueSum = value * this->realVisitsSum;
 }
+
+#ifdef MPV_MCTS
+void Node::set_large_net_value(float value)
+{
+    ++this->realLargeNetVisitsSum;
+    this->valueSumLarge = value * this->realLargeNetVisitsSum;
+}
+#endif
 
 void Node::add_new_child_node(Node *newNode, ChildIdx childIdx)
 {
@@ -1074,6 +1065,13 @@ void Node::enable_node_is_enqueued(){
 void Node::disable_node_is_enqueued(){
     this->enqueued = false;
 }
+
+void Node::combine_qValues(ChildIdx childIdx){
+    float largeNetFactor = 0.5;
+    this->d->qValues[childIdx] = (d->qValuesLarge[childIdx] * largeNetFactor + d->qValuesSmall[childIdx] * (1-largeNetFactor));
+
+    valueSum = (float(valueSumSmall) / realVisitsSum * (1- largeNetFactor) + float(valueSumLarge) / realLargeNetVisitsSum) * realVisitsSum;
+}
 #endif
 
 const char* node_type_to_string(enum NodeType nodeType)
@@ -1184,15 +1182,13 @@ void Node::print_node_statistics(const StateObj* state) const
         size_t n = 0;
         float q = Q_INIT;
 #ifdef MPV_MCTS
-        bool lv = false;
+        size_t lv = 0;
 #endif
         if (childIdx < d->noVisitIdx) {
             n = d->childNumberVisits[childIdx];
             q = d->qValues[childIdx];
 #ifdef MPV_MCTS
-            if(d->childNodes[childIdx] != nullptr){
-                lv = d->childNodes[childIdx]->has_large_nn_results();
-            }
+            lv = d->childNumberLargeNetVisits[childIdx];
 #endif
         }
 
@@ -1216,7 +1212,7 @@ void Node::print_node_statistics(const StateObj* state) const
             cout << setfill(' ') << setw(9) << node_type_to_string(UNSOLVED);
         }
 #ifdef MPV_MCTS       
-        cout << "  | " << (lv ? "true" : "false");
+        cout << "  | " << lv;
 #endif
         cout << endl;
     }

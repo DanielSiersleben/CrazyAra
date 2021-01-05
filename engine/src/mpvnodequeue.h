@@ -145,7 +145,9 @@ public:
 
     void swapBuffer(){
         // make sure Buffer is already completed
+        while(batch_ready){};
         assert(batch_ready == false);
+
 
         float* tmp = inputPlanes;
         inputPlanes = inputBuffer;

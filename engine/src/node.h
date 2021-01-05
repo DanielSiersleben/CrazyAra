@@ -78,6 +78,10 @@ private:
     // singular values
     // valueSum stores the sum of all incoming value evaluations
     double valueSum;
+#ifdef MPV_MCTS
+    double valueSumSmall;
+    double valueSumLarge;
+#endif
 
     unique_ptr<NodeData> d;
 #ifdef MCTS_STORE_STATES
@@ -85,6 +89,9 @@ private:
 #endif
 
     uint32_t realVisitsSum;
+#ifdef MPV_MCTS
+    uint32_t realLargeNetVisitsSum;
+#endif
 
     // identifiers
     uint16_t pliesFromNull;
@@ -175,8 +182,40 @@ public:
         // decrement virtual loss counter
         update_virtual_loss_counter<false>(childIdx);
 
-        valueSum += value;
         ++realVisitsSum;
+
+#ifdef MPV_MCTS
+        valueSumSmall += value;
+
+        d->childNumberVisits[childIdx] -= size_t(virtualLoss);
+        d->visitSum -= size_t(virtualLoss);
+
+
+        if (d->childNumberVisits[childIdx] == virtualLoss) {
+            // set new Q-value based on return
+            // (the initialization of the Q-value was by Q_INIT which we don't want to recover.)
+            d->qValuesSmall[childIdx] = value;
+        }
+        else {
+            // revert virtual loss and update the Q-value
+            assert(d->childNumberVisits[childIdx] != 0);
+            d->qValuesSmall[childIdx] = (double(d->qValuesSmall[childIdx]) * d->childNumberVisits[childIdx] + value) / (d->childNumberVisits[childIdx] + 1);
+            assert(!isnan(d->qValuesSmall[childIdx]));
+        }
+
+        ++d->childNumberVisits[childIdx];
+        ++d->visitSum;
+
+        if(d->qValuesLarge[childIdx] != Q_INIT){
+            // update combined Q-Val
+            combine_qValues(childIdx);
+        }
+        else {
+            d->qValues[childIdx] = d->qValuesSmall[childIdx];
+            valueSum = valueSumSmall;
+        }
+#else
+        valueSum += value;
 
         if (d->childNumberVisits[childIdx] == virtualLoss) {
             // set new Q-value based on return
@@ -194,6 +233,7 @@ public:
             d->childNumberVisits[childIdx] -= size_t(virtualLoss) - 1;
             d->visitSum -= size_t(virtualLoss) - 1;
         }
+#endif
         if (terminalBackup) {
             ++d->terminalVisits;
         }
@@ -204,7 +244,37 @@ public:
     }
 
 #ifdef MPV_MCTS
-    void update_value_mpv(ChildIdx childIdx, float valueSum, int valueFactor, bool resetQval);
+    void update_value_mpv(ChildIdx childIdx, float value, float virtualLoss){
+        lock();
+
+        ++realLargeNetVisitsSum;
+        valueSumLarge += value;
+
+        if(d->qValuesLarge[childIdx] == Q_INIT){
+            d->qValuesLarge[childIdx] = value;
+        }
+        else{
+            // revert virtual loss and update the LargeNet-Q-value
+            assert(d->childNumberLargeNetVisits[childIdx] != 0);
+            d->qValuesLarge[childIdx] = (double(d->qValuesLarge[childIdx]) * d->childNumberLargeNetVisits[childIdx] + value) / (d->childNumberLargeNetVisits[childIdx] + 1);
+            assert(!isnan(d->qValuesLarge[childIdx]));
+        }
+
+
+        ++d->childNumberLargeNetVisits[childIdx];
+
+
+        // update combined Q-Val
+        combine_qValues(childIdx);
+        // re-apply virtual loss
+        d->childNumberVisits[childIdx] -= size_t(virtualLoss);
+        d->qValues[childIdx] = (double(d->qValues[childIdx]) * d->childNumberVisits[childIdx] - virtualLoss) / (d->childNumberVisits[childIdx] + virtualLoss);
+        d->childNumberVisits[childIdx] += size_t(virtualLoss);
+
+        //        cout << d->qValues[childIdx] << "|" << d->qValuesLarge[childIdx] << "|" << d->qValuesSmall[childIdx] << endl;
+
+        unlock();
+    }
 #endif
 
     /**
@@ -230,6 +300,7 @@ public:
     bool is_terminal() const;
 #ifdef MPV_MCTS
     bool has_large_nn_results() const;
+    float get_large_net_value() const;
 #endif
     bool has_nn_results() const;
     float get_value() const;
@@ -309,17 +380,7 @@ public:
 
     void set_value(float valueSum);
 #ifdef MPV_MCTS
-    template<bool soft_reset>
-    void set_mpv_value(float value, size_t valueFactor)
-    {
-        if (soft_reset){
-            this->valueSum = value * valueFactor;
-            this->realVisitsSum = valueFactor;
-        }
-        else{
-            this->valueSum = (double(valueSum * (realVisitsSum) + (value * valueFactor * valueFactor))/(realVisitsSum + valueFactor));
-        }
-    };
+    void set_large_net_value(float valueSum);
 #endif
     uint16_t main_child_idx_for_parent() const;
 
@@ -391,6 +452,7 @@ public:
     void enable_has_large_nn_results();
     void enable_node_is_enqueued();
     void disable_node_is_enqueued();
+    void combine_qValues(ChildIdx childIdx);
 #endif
 
     void enable_has_nn_results();
@@ -787,6 +849,7 @@ void backup_value(float value, float virtualLoss, const Trajectory& trajectory, 
 #ifndef MCTS_SINGLE_PLAYER
         value = -value;
 #endif
+
         terminal ? it->node->revert_virtual_loss_and_update<true>(it->childIdx, value, virtualLoss, solveForTerminal) :
                    it->node->revert_virtual_loss_and_update<false>(it->childIdx, value, virtualLoss, solveForTerminal);
 
@@ -798,9 +861,33 @@ void backup_value(float value, float virtualLoss, const Trajectory& trajectory, 
         }
     }
 }
+
 #ifdef MPV_MCTS
-void backup_mpv_value(float value, const Trajectory& trajectory, size_t valueFactor, bool resetQval);
+template <bool terminal>
+void backup_mpv_value(float value, float virtualLoss, const Trajectory& trajectory, bool solveForTerminal) {
+    double targetQValue = 0;
+    for (auto it = trajectory.rbegin(); it != trajectory.rend(); ++it) {
+        if (targetQValue != 0) {
+            const uint_fast32_t transposVisits = it->node->get_real_visits(it->childIdx);
+            if (transposVisits != 0) {
+                const double transposQValue = -it->node->get_q_sum(it->childIdx, virtualLoss) / transposVisits;
+                value = get_transposition_q_value(transposVisits, transposQValue, targetQValue);
+            }
+        }
+#ifndef MCTS_SINGLE_PLAYER
+        value = -value;
 #endif
 
+        it->node->update_value_mpv(it->childIdx, value, virtualLoss);
+
+        if (it->node->is_transposition()) {
+            targetQValue = it->node->get_value();
+        }
+        else {
+            targetQValue = 0;
+        }
+    }
+}
+#endif
 
 #endif // NODE_H

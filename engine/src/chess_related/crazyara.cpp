@@ -627,8 +627,7 @@ void CrazyAra::init_search_settings()
     searchSettings.mpvThreads = Options["mpvThreads"] * get_num_gpus(Options);
     searchSettings.largeNetEvalThreshold = Options["largeNetThreshold"];
     searchSettings.largeNetStartPhase = Options["largeNetStartPhase"];
-    searchSettings.largeNetValueBackprop = Options["largeNetValueBackprop"];
-    searchSettings.resetQVal = Options["Soft_Reset_Q_Values"];
+
 #endif
     searchSettings.batchSize = Options["Batch_Size"];
     searchSettings.useTranspositionTable = Options["Use_Transposition_Table"];

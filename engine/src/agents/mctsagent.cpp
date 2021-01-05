@@ -191,6 +191,7 @@ void MCTSAgent::create_new_root_node(StateObj* state)
     size_t tbHits = 0;
 #ifdef MPV_MCTS
     fill_mpvnn_results(0, net->is_policy_map(), valueOutputs, probOutputs, rootNode, tbHits, state->side_to_move(), searchSettings);
+    rootNode->set_value(valueOutputs[0]);
 #else
     fill_nn_results(0, net->is_policy_map(), valueOutputs, probOutputs, rootNode, tbHits, state->side_to_move(), searchSettings);
 #endif
@@ -354,7 +355,6 @@ void MCTSAgent::run_mcts_search()
     tManager->join();
     delete[] threads;
     isRunning = false;
-    cout << "total largeNet evals: " << largeNetNodeQueue.getLargeNetEvals() << endl;
 }
 
 void MCTSAgent::stop()

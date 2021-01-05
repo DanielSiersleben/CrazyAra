@@ -64,31 +64,29 @@ void backup_mpvnet_values(FixedVector<Node*>* nodes, const vector<Trajectory>& t
     int i;
     while((i = idx->fetch_add(1)) < nodes->size()){
         const Node* node = nodes->get_element(i);
-        backup_mpv_value(node->get_value(), trajectories[i], searchSettings->largeNetEvalThreshold, searchSettings->resetQVal);
+
+        backup_mpv_value<false>(node->get_large_net_value(), searchSettings->virtualLoss, trajectories[i], false);
+
     }
 }
 
 void MPVSearchThread::backup_value_outputs()
 {
     const vector<Trajectory>& trajectories = newTrajectories;
-    if(searchSettings->largeNetValueBackprop){
-        if(searchSettings->largeNetBackpropThreads > 1){
-            atomic_int idx = 0;
-            for(auto i = 0; i < searchSettings->largeNetBackpropThreads; ++i){
-                workerThreads[i] = new thread(backup_mpvnet_values, newNodes.get(), trajectories, &idx, searchSettings);
-            }
-
-            for(auto i = 0; i < searchSettings->largeNetBackpropThreads; ++i){
-                workerThreads[i]->join();
-            }
+    atomic_int idx = 0;
+    if(searchSettings->largeNetBackpropThreads > 1){
+        for(auto i = 0; i < searchSettings->largeNetBackpropThreads; ++i){
+            workerThreads[i] = new thread(backup_mpvnet_values, newNodes.get(), trajectories, &idx, searchSettings);
         }
-        else{
-            for(size_t idx = 0; idx < newNodes->size(); ++idx){
-                    const Node* node = newNodes->get_element(idx);
-                    backup_mpv_value(node->get_value(), trajectories[idx], searchSettings->largeNetEvalThreshold, searchSettings->resetQVal);
-            }
+
+        for(auto i = 0; i < searchSettings->largeNetBackpropThreads; ++i){
+            workerThreads[i]->join();
         }
     }
+    else{
+        backup_mpvnet_values(newNodes.get(), trajectories, &idx, searchSettings);
+    }
+
 
     newNodes->reset_idx();
     newTrajectories.clear();
@@ -106,11 +104,7 @@ void fill_mpvnn_results(size_t batchIdx, bool isPolicyMap, const float* valueOut
 {
     node->set_probabilities_for_moves(get_policy_data_batch(batchIdx, probOutputs, isPolicyMap), sideToMove);
     node_post_process_policy(node, searchSettings->nodePolicyTemperature, isPolicyMap, searchSettings);
-
-    (searchSettings->resetQVal || !node->has_nn_results()) ? node->set_mpv_value<true>(valueOutputs[batchIdx], searchSettings->largeNetEvalThreshold) :
-    node->set_mpv_value<false>(valueOutputs[batchIdx], searchSettings->largeNetEvalThreshold);
-
-    //node_assign_value(node, valueOutputs, tbHits, batchIdx);
+    node->set_large_net_value(valueOutputs[batchIdx]);
 
     node->enable_has_large_nn_results();
 }
