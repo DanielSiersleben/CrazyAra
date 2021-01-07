@@ -26,6 +26,7 @@
 #ifdef TENSORRT
 #include "tensorrtapi.h"
 
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
@@ -36,6 +37,8 @@
 #ifndef MODE_POMMERMAN
 #include "chess_related/chessbatchstream.h"
 #endif
+
+using namespace sample;
 
 TensorrtAPI::TensorrtAPI(int deviceID, unsigned int batchSize, const string &modelDirectory, const string& strPrecision):
     NeuralNetAPI("gpu", deviceID, batchSize, modelDirectory, true),
@@ -125,7 +128,8 @@ void TensorrtAPI::predict(float* inputPlanes, float* valueOutput, float* probOut
 
 ICudaEngine* TensorrtAPI::create_cuda_engine_from_onnx()
 {
-    info_string("build TensorRT engine");
+    info_string("Building TensorRT engine...");
+    info_string("This may take a few minutes...");
     // create an engine builder
     IBuilder* builder = createInferBuilder(gLogger.getTRTLogger());
     builder->setMaxBatchSize(int(batchSize));
@@ -168,7 +172,10 @@ ICudaEngine* TensorrtAPI::get_cuda_engine() {
 
     if (!engine) {
         // fallback: Create engine from scratch
+        std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
         engine = create_cuda_engine_from_onnx();
+        std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+        info_elapsed_time("Elapsed time for building TensorRT engine:", begin, end);
 
         if (engine) {
             info_string("serialize engine:", trtFilePath);

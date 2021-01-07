@@ -176,7 +176,7 @@ public:
      * @param value Specifies the value evaluation to backpropagate
      * @param solveForTerminal Decides if the terminal solver will be used
      */
-    template<bool terminalBackup>
+    template<bool freeBackup>
     void revert_virtual_loss_and_update(ChildIdx childIdx, float value, float virtualLoss, bool& solveForTerminal)
     {
         lock();
@@ -234,8 +234,8 @@ public:
             d->visitSum -= size_t(virtualLoss) - 1;
         }
 #endif
-        if (terminalBackup) {
-            ++d->terminalVisits;
+        if (freeBackup) {
+            ++d->freeVisits;
         }
         if (solveForTerminal) {
             solveForTerminal = solve_for_terminal(childIdx);
@@ -482,7 +482,7 @@ public:
     bool is_tablebase() const;
     uint8_t get_node_type() const;
     uint16_t get_end_in_ply() const;
-    uint32_t get_terminal_visits() const;
+    uint32_t get_free_visits() const;
 
     void init_node_data(size_t numberNodes);
     void init_node_data();
@@ -527,7 +527,15 @@ public:
     /**
      * @brief print_node_statistics Prints all node statistics of the child nodes to stdout
      */
-    void print_node_statistics(const StateObj* pos) const;
+
+    /**
+     * @brief print_node_statistics
+     * @param pos Position object related to the current position.
+     *  If the position is given as "nulltptr" the moves will be displayed in UCI notation instead of SAN.
+     * @param customOrdering Optional custom ordering of how the moves shall be displayed (e.g. according to the MCTS policy after search).
+     *  If an empty vector is given, it will use the current ordering of the child nodes (by default according to the prior policy).
+     */
+    void print_node_statistics(const StateObj* pos, const vector<size_t>& customOrdering) const;
 
     /**
      * @brief get_nodes Returns the number of nodes in the subtree of this node

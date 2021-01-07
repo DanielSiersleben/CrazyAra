@@ -65,7 +65,7 @@ void NodeData::reserve_initial_space()
 }
 
 NodeData::NodeData(size_t numberChildNodes):
-    terminalVisits(0),
+    freeVisits(0),
     visitSum(0),
     checkmateIdx(NO_CHECKMATE),
     endInPly(0),

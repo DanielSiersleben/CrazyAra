@@ -811,9 +811,9 @@ uint16_t Node::get_end_in_ply() const
     return d->endInPly;
 }
 
-uint32_t Node::get_terminal_visits() const
+uint32_t Node::get_free_visits() const
 {
-    return d->terminalVisits;
+    return d->freeVisits;
 }
 
 void Node::init_node_data(size_t numberNodes)
@@ -1190,7 +1190,7 @@ float get_current_cput(float visits, const SearchSettings* searchSettings)
     return log((visits + searchSettings->cpuctBase + 1) / searchSettings->cpuctBase) + searchSettings->cpuctInit;
 }
 
-void Node::print_node_statistics(const StateObj* state) const
+void Node::print_node_statistics(const StateObj* state, const vector<size_t>& customOrdering) const
 {
 #ifdef MPV_MCTS
     const string header = "  #  | Move  |    Visits    |  Policy   |  Q-values  |  CP   |    Type    | largeNet eval";
@@ -1200,9 +1200,10 @@ void Node::print_node_statistics(const StateObj* state) const
     const string filler = "-----+-------+--------------+-----------+------------+-------+------------";
 #endif
     cout << header << endl
-         << std::showpoint << std::fixed << std::setprecision(7) // << std::noshowpcout
+         << std::showpoint << std::fixed << std::setprecision(7)
          << filler << endl;
-    for (size_t childIdx = 0; childIdx < get_number_child_nodes(); ++childIdx) {
+    for (size_t idx = 0; idx < get_number_child_nodes(); ++idx) {
+        const size_t childIdx = customOrdering.size() == get_number_child_nodes() ? customOrdering[idx] : idx;
         size_t n = 0;
         float q = Q_INIT;
 #ifdef MPV_MCTS
@@ -1247,12 +1248,12 @@ void Node::print_node_statistics(const StateObj* state) const
          << "isTablebase:\t" << is_tablebase() << endl
          << "unsolvedNodes:\t" << d->numberUnsolvedChildNodes << endl
          << "Visits:\t\t" << get_visits() << endl
-         << "terminalVisits:\t" << get_terminal_visits() << endl;
+         << "freeVisits:\t" << get_free_visits() << "/" << get_visits() << endl;
 }
 
 uint32_t Node::get_nodes()
 {
-    return get_visits() - get_terminal_visits();
+    return get_visits() - get_free_visits();
 }
 
 bool Node::is_transposition_return(double myQvalue) const
@@ -1282,11 +1283,11 @@ bool is_terminal_value(float value)
 
 size_t get_node_count(const Node *node)
 {
-    return node->get_visits() - node->get_terminal_visits();
+    return node->get_visits() - node->get_free_visits();
 }
 
 float get_transposition_q_value(uint_fast32_t transposVisits, double transposQValue, double targetQValue)
 {
-    return clamp(transposVisits * (targetQValue - transposQValue) + targetQValue, double(LOSS_VALUE), double(WIN_VALUE));
+    return std::clamp(transposVisits * (targetQValue - transposQValue) + targetQValue, double(LOSS_VALUE), double(WIN_VALUE));
 }
 
