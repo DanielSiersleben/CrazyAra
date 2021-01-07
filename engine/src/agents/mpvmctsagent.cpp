@@ -13,4 +13,5 @@ MPVMCTSAgent::MPVMCTSAgent(NeuralNetAPI* smallNetSingle,
         searchThreads.emplace_back(new MPVSearchThread(mpvNetBatches[i].get(), searchSettings, &mapWithMutex, &largeNetNodeQueue));
     }
 }
+MPVMCTSAgent::~MPVMCTSAgent(){};
 #endif

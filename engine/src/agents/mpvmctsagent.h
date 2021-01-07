@@ -26,9 +26,11 @@ public:
               vector<unique_ptr<NeuralNetAPI>>& mpvNetBatches,
               SearchSettings* searchSettings,
               PlaySettings* playSettings);
+    virtual ~MPVMCTSAgent();
     MPVMCTSAgent(const MPVMCTSAgent&) = delete;
     MPVMCTSAgent& operator=(MPVMCTSAgent const&) = delete;
 };
+
 
 #endif
 #endif // MPVMCTSAGENT_H

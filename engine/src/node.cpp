@@ -96,6 +96,7 @@ Node::Node(StateObj* state, bool inCheck, const SearchSettings* searchSettings):
     valueSumSmall(0),
     valueSumLarge(0),
     realLargeNetVisitsSum(0),
+    largeNetQValueWeight(searchSettings->largeNetQValueWeight/100),
 #endif
     legalActions(state->legal_actions()),
     key(state->hash_key()),
@@ -432,6 +433,26 @@ Node::~Node()
 {
 }
 
+#ifdef MPV_MCTS
+void Node::sort_not_expanded_moves_by_probabilities()
+{
+    if (d == nullptr) return;
+
+    size_t visitedChilds = this->d->noVisitIdx;
+    vector<size_t> permutation(policyProbSmall.size());
+    std::iota(permutation.begin(), permutation.begin() + visitedChilds, 0);
+    vector<float> unsorted {policyProbSmall.begin() + visitedChilds, policyProbSmall.end()};
+
+    auto p = sort_permutation(unsorted, std::greater<float>());
+    for(size_t& d : p) d += visitedChilds;
+
+    permutation.insert(permutation.begin()+visitedChilds, p.begin(), p.end());
+
+    apply_permutation_in_place(policyProbSmall, permutation);
+    apply_permutation_in_place(legalActions, permutation);
+}
+#endif
+
 void Node::sort_moves_by_probabilities()
 {
     auto p = sort_permutation(policyProbSmall, std::greater<float>());
@@ -683,6 +704,10 @@ void Node::set_value(float value)
 #ifdef MPV_MCTS
 void Node::set_large_net_value(float value)
 {
+    if(this->realVisitsSum == 0){
+        // relevant if starting with largeNet
+        this->set_value(value);
+    }
     ++this->realLargeNetVisitsSum;
     this->valueSumLarge = value * this->realLargeNetVisitsSum;
 }
@@ -1067,10 +1092,9 @@ void Node::disable_node_is_enqueued(){
 }
 
 void Node::combine_qValues(ChildIdx childIdx){
-    float largeNetFactor = 0.5;
-    this->d->qValues[childIdx] = (d->qValuesLarge[childIdx] * largeNetFactor + d->qValuesSmall[childIdx] * (1-largeNetFactor));
+    this->d->qValues[childIdx] = (d->qValuesLarge[childIdx] * largeNetQValueWeight + d->qValuesSmall[childIdx] * (1-largeNetQValueWeight));
 
-    valueSum = (float(valueSumSmall) / realVisitsSum * (1- largeNetFactor) + float(valueSumLarge) / realLargeNetVisitsSum) * realVisitsSum;
+    valueSum = ((float(valueSumSmall) / realVisitsSum) * (1- largeNetQValueWeight) + ((float(valueSumLarge) / realLargeNetVisitsSum)*largeNetQValueWeight)) * realVisitsSum;
 }
 #endif
 

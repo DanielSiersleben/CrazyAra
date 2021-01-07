@@ -40,6 +40,9 @@ struct SearchSettings
     size_t mpvThreads;
     size_t largeNetEvalThreshold;
     size_t largeNetBatchSize;
+    bool separate_QValues;
+    float largeNetQValueWeight;
+    bool sortPolicyLargeNet;
 #endif
     unsigned int batchSize;
     float dirichletEpsilon;

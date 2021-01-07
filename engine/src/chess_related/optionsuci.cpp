@@ -58,9 +58,12 @@ void OptionsUCI::init(OptionsMap &o)
 #ifdef MPV_MCTS
     o["MPVThreads"]                    << Option(1, 1, 512);
     o["largeNetBackpropThreads"]       << Option(1, 1 , 10);
-    o["largeNetThreshold"]             << Option(10, 10, 999999);
+    o["largeNetThreshold"]             << Option(2, 2, 999999);
     o["largeNetBatchSize"]             << Option(16, 1, 8192);
     o["largeNetStartPhase"]            << Option(false);
+    o["sort_policy_largeNet"]          << Option(true);
+    o["Use_Separate_QValues"]          << Option(true);
+    o["LargeNet_QValue_Weight"]        << Option(50, 0, 100);
 #endif
     o["Centi_CPuct_Init"]              << Option(250, 1, 99999);
     o["CPuct_Base"]                    << Option(19652, 1, 99999);
@@ -143,7 +146,7 @@ void OptionsUCI::init(OptionsMap &o)
     o["UCI_Chess960"]                  << Option(true);
 #endif
     o["Random_Playout"]                << Option(false);
-    o["Fixed_Movetime"]                << Option(175, 0, 99999999);
+    o["Fixed_Movetime"]                << Option(15, 0, 99999999);
     o["Reuse_Tree"]                    << Option(false);
     o["MCTS_Solver"]                   << Option(true);
 }

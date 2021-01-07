@@ -246,6 +246,9 @@ void MCTSAgent::apply_move_to_tree(Action move, bool ownMove)
 
 void MCTSAgent::clear_game_history()
 {
+#ifdef MPV_MCTS
+    largeNetNodeQueue.clear();
+#endif
     delete_old_tree();
     ownNextRoot = nullptr;
     opponentsNextRoot = nullptr;
@@ -253,9 +256,6 @@ void MCTSAgent::clear_game_history()
     lastValueEval = -1.0f;
     nbNPSentries = 0;
     overallNPS = 0;
-#ifdef MPV_MCTS
-    largeNetNodeQueue.clear();
-#endif
 }
 
 bool MCTSAgent::is_policy_map()

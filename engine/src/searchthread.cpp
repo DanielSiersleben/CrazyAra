@@ -56,6 +56,8 @@ SearchThread::SearchThread(NeuralNetAPI *netBatch, SearchSettings* searchSetting
     trajectoryBuffer.reserve(DEPTH_INIT);
     actionsBuffer.reserve(DEPTH_INIT);
 }
+SearchThread::~SearchThread(){
+}
 #else
 SearchThread::SearchThread(NeuralNetAPI *netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex):
     NeuralNetAPIUser(netBatch),

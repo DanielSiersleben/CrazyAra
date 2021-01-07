@@ -4,6 +4,9 @@
 #include "node.h"
 #include "atomic"
 
+class MPVSearchThread;
+
+
 class MPVNodeQueue{
 private:
     unique_ptr<Node*[]> queue;
@@ -81,6 +84,7 @@ public:
     }
 
     void clear(){
+        this->lock();
         /*
         queue.reset(new Node*[batchSize]);
         sideToMove.reset(new SideToMove[batchSize]);
@@ -94,6 +98,7 @@ public:
         batch_ready = false;
 
         totalEvals = 0;
+        this->unlock();
     }
 
     void mark_nodes_as_dequeued(){

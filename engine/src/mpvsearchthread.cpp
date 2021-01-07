@@ -7,6 +7,8 @@
 MPVSearchThread::MPVSearchThread(NeuralNetAPI* netBatch, SearchSettings* searchSettings, MapWithMutex* mapWithMutex, MPVNodeQueue *nodeQueue):
     SearchThread(netBatch, searchSettings, mapWithMutex, nodeQueue, true)
 {
+    newNodes.release();
+    newNodeSideToMove.release();
      newNodes = make_unique<FixedVector<Node*>>(searchSettings->largeNetBatchSize);
      newNodeSideToMove = make_unique<FixedVector<SideToMove>>(searchSettings->largeNetBatchSize);
 
@@ -37,6 +39,7 @@ void MPVSearchThread::set_nn_results_to_child_nodes()
     for (auto node: *newNodes) {
         if (!node->is_terminal()) {
             fill_mpvnn_results(batchIdx, net->is_policy_map(), valueOutputs, probOutputs, node, tbHits, newNodeSideToMove->get_element(batchIdx), searchSettings);
+            if(this->searchSettings->sortPolicyLargeNet) node->sort_not_expanded_moves_by_probabilities();
         }
         ++batchIdx;
     }
@@ -65,7 +68,7 @@ void backup_mpvnet_values(FixedVector<Node*>* nodes, const vector<Trajectory>& t
     while((i = idx->fetch_add(1)) < nodes->size()){
         const Node* node = nodes->get_element(i);
 
-        backup_mpv_value<false>(node->get_large_net_value(), searchSettings->virtualLoss, trajectories[i], false);
+        backup_mpv_value<false>(node->get_large_net_value(), searchSettings->virtualLoss, trajectories[i], false, searchSettings->separate_QValues, searchSettings->largeNetEvalThreshold);
 
     }
 }
