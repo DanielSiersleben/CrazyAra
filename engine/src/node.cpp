@@ -1084,8 +1084,11 @@ bool Node::evaluatedByLargeNet(){
 void Node::enable_has_large_nn_results(){
     this->hasLargeNNResults = true;
 }
-void Node::enable_node_is_enqueued(){
+bool Node::enable_node_is_enqueued(){
+    if(enqueued) return false;
+
     this->enqueued = true;
+    return true;
 }
 void Node::disable_node_is_enqueued(){
     this->enqueued = false;

@@ -227,16 +227,16 @@ Node* SearchThread::get_new_child_to_evaluate(ChildIdx& childIdx, NodeDescriptio
 #ifdef MPV_MCTS
         if(currentNode->get_real_visits() >= searchSettings->largeNetEvalThreshold && !currentNode->evaluatedByLargeNet())
         {
-            currentNode->enable_node_is_enqueued();
+            if(!currentNode->enable_node_is_enqueued()){
+                int idx = nodeQueue->fetch_and_increase_Index();
+                newState->get_state_planes(true, nodeQueue->getInputPlanes()+idx*StateConstants::NB_VALUES_TOTAL());
 
-            int idx = nodeQueue->fetch_and_increase_Index();
-            newState->get_state_planes(true, nodeQueue->getInputPlanes()+idx*StateConstants::NB_VALUES_TOTAL());
+                Trajectory tmp = trajectoryBuffer;
+                // pop last elem (not part of trajectory)
+                tmp.pop_back();
 
-            Trajectory tmp = trajectoryBuffer;
-            // pop last elem (not part of trajectory)
-            tmp.pop_back();
-
-            nodeQueue->insert(currentNode, newState->side_to_move(), tmp, idx);
+                nodeQueue->insert(currentNode, newState->side_to_move(), tmp, idx);
+            }
         }
 #endif
 

@@ -472,7 +472,7 @@ public:
 #ifdef MPV_MCTS
     bool evaluatedByLargeNet();
     void enable_has_large_nn_results();
-    void enable_node_is_enqueued();
+    bool enable_node_is_enqueued();
     void disable_node_is_enqueued();
     void combine_qValues(ChildIdx childIdx);
 #endif
