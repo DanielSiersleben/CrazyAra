@@ -146,7 +146,7 @@ void OptionsUCI::init(OptionsMap &o)
     o["UCI_Chess960"]                  << Option(true);
 #endif
     o["Random_Playout"]                << Option(false);
-    o["Fixed_Movetime"]                << Option(15, 0, 99999999);
+    o["Fixed_Movetime"]                << Option(10, 0, 99999999);
     o["Reuse_Tree"]                    << Option(false);
     o["MCTS_Solver"]                   << Option(true);
 }

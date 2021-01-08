@@ -323,7 +323,7 @@ void MCTSAgent::run_mcts_search()
 #ifdef MPV_MCTS
     for (size_t i = searchSettings->threads; i < totalThreads; ++i){
         searchThreads[i]->set_root_node(rootNode);
-        searchThreads[i]->set_root_state(rootState);
+        searchThreads[i]->set_root_state(rootState.get());
         searchThreads[i]->set_search_limits(searchLimits);
 
         if(searchSettings->largeNetStartPhase){

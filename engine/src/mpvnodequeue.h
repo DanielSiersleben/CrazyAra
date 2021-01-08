@@ -123,8 +123,10 @@ public:
     int fetch_and_increase_Index(){
        int tmp = batchIdx->fetch_add(1);
 
-       while (tmp >= batchSize) {
+       if (tmp >= batchSize) {
            // wait till Buffer is swapped
+           while (batchIdx->load() >= batchSize){}
+
            tmp = batchIdx->fetch_add(1);
        }
 
@@ -161,9 +163,11 @@ public:
         queue.swap(queueBuffer);
         sideToMove.swap(sideToMoveBuffer);
         trajectories.swap(trajectoriesBuffer);
-        batchIdx->store(0);
-        completedIdx->store(0);
+
         batch_ready = true;
+
+        completedIdx->store(0);
+        batchIdx->store(0);
     }
 
     float* getInputBuffer(){
