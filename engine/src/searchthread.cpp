@@ -213,21 +213,17 @@ Node* SearchThread::get_new_child_to_evaluate(ChildIdx& childIdx, NodeDescriptio
 
         Node* nextNode = currentNode->get_child_node(childIdx);
         description.depth++;
-        if (nextNode == nullptr) {
-#ifdef MCTS_STORE_STATES
-            StateObj* newState = currentNode->get_state()->clone();
-#else
-            newState = unique_ptr<StateObj>(rootState->clone());
-            assert(actionsBuffer.size() == description.depth-1);
-            for (Action action : actionsBuffer) {
-                newState->do_action(action);
-            }
-#endif
 
 #ifdef MPV_MCTS
         if(currentNode->get_real_visits() >= searchSettings->largeNetEvalThreshold && !currentNode->evaluatedByLargeNet())
         {
-            if(!currentNode->enable_node_is_enqueued()){
+            if(currentNode->enable_node_is_enqueued()){
+                newState = unique_ptr<StateObj>(rootState->clone());
+                assert(actionsBuffer.size() == description.depth-1);
+                for (Action action : actionsBuffer) {
+                    newState->do_action(action);
+                }
+
                 int idx = nodeQueue->fetch_and_increase_Index();
                 newState->get_state_planes(true, nodeQueue->getInputPlanes()+idx*StateConstants::NB_VALUES_TOTAL());
 
@@ -238,6 +234,17 @@ Node* SearchThread::get_new_child_to_evaluate(ChildIdx& childIdx, NodeDescriptio
                 nodeQueue->insert(currentNode, newState->side_to_move(), tmp, idx);
             }
         }
+#endif
+
+        if (nextNode == nullptr) {
+#ifdef MCTS_STORE_STATES
+            StateObj* newState = currentNode->get_state()->clone();
+#else
+            newState = unique_ptr<StateObj>(rootState->clone());
+            assert(actionsBuffer.size() == description.depth-1);
+            for (Action action : actionsBuffer) {
+                newState->do_action(action);
+            }
 #endif
 
             const bool inCheck = newState->gives_check(currentNode->get_action(childIdx));
@@ -418,7 +425,7 @@ void SearchThread::thread_iteration()
 
 void run_search_thread(SearchThread *t)
 {
-    t->SearchThread::set_is_running(true);
+    t->set_is_running(true);
     t->reset_stats();
     while(t->is_running() && t->nodes_limits_ok() && t->is_root_node_unsolved()) {
         t->thread_iteration();

@@ -222,6 +222,18 @@ std::vector<std::size_t> sort_permutation(const DynamicVector<T>& vec, Compare c
     return p;
 }
 
+#ifdef MPV_MCTS
+template <typename T, typename Compare>
+std::vector<std::size_t> partial_sort_permutation(const DynamicVector<T>& vec, Compare compare, size_t startPos)
+{
+    std::vector<std::size_t> p(vec.size());
+    std::iota(p.begin(), p.end(), 0);
+    std::sort(p.begin() + startPos, p.end(),
+        [&](std::size_t i, std::size_t j){ return compare(vec[i], vec[j]); });
+    return p;
+}
+#endif
+
 template <typename T>
 void apply_permutation_in_place(DynamicVector<T>& vec, const std::vector<std::size_t>& p)
 {

@@ -438,18 +438,14 @@ void Node::sort_not_expanded_moves_by_probabilities()
 {
     if (d == nullptr) return;
 
+    this->lock();
     size_t visitedChilds = this->d->noVisitIdx;
-    vector<size_t> permutation(policyProbSmall.size());
-    std::iota(permutation.begin(), permutation.begin() + visitedChilds, 0);
-    vector<float> unsorted {policyProbSmall.begin() + visitedChilds, policyProbSmall.end()};
 
-    auto p = sort_permutation(unsorted, std::greater<float>());
-    for(size_t& d : p) d += visitedChilds;
+    auto p = partial_sort_permutation(policyProbSmall, std::greater<float>(), visitedChilds);
 
-    permutation.insert(permutation.begin()+visitedChilds, p.begin(), p.end());
-
-    apply_permutation_in_place(policyProbSmall, permutation);
-    apply_permutation_in_place(legalActions, permutation);
+    apply_permutation_in_place(policyProbSmall, p);
+    apply_permutation_in_place(legalActions, p);
+    this->unlock();
 }
 #endif
 

@@ -8,6 +8,9 @@ class MPVSearchThread;
 
 
 class MPVNodeQueue{
+public:
+    bool mpvThread_active;
+
 private:
     unique_ptr<Node*[]> queue;
     unique_ptr<SideToMove[]> sideToMove;
@@ -43,6 +46,8 @@ public:
 
         this->batchSize = batchSize;
         batch_ready = false;
+
+        mpvThread_active = false;
 
         totalEvals = 0;
 
@@ -123,9 +128,12 @@ public:
     int fetch_and_increase_Index(){
        int tmp = batchIdx->fetch_add(1);
 
-       if (tmp >= batchSize) {
+       while (tmp >= batchSize) {
            // wait till Buffer is swapped
-           while (batchIdx->load() >= batchSize){}
+           while (tmp >= batchSize){
+               tmp = batchIdx->load();
+               //cout << "tst" << endl;
+           }
 
            tmp = batchIdx->fetch_add(1);
        }
@@ -142,18 +150,21 @@ public:
         completedIdx->fetch_add(1);
 
         if(index == batchSize-1){
-            while(completedIdx->load() != batchSize){}
+            while(completedIdx->load() != batchSize){
+                batchIdx->load();
+                //cout << "waiting" << endl;
+            }
             // swap pointer of Buffer and Planes
-            this->lock();
             swapBuffer();
-            this->unlock();
         }
     }
 
     void swapBuffer(){
         // make sure Buffer is already completed
-        while(batch_ready){};
-        assert(batch_ready == false);
+        while(batch_ready && mpvThread_active){
+            batchIdx->load();
+            //cout << "mpvWait" <<endl;
+        };
 
 
         float* tmp = inputPlanes;
