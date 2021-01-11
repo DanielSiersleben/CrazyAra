@@ -19,14 +19,11 @@ MPVSearchThread::~MPVSearchThread(){
 
 void MPVSearchThread::create_mpv_mini_batch()
 {
-    Node** tmp_nodes = nodeQueue->getQueue();
-    SideToMove* tmp_sideToMove = nodeQueue->getSideToMove();
     Trajectory* tmp_trajectories = nodeQueue->getTrajectories();
-       for(auto i = 0; i < searchSettings->largeNetBatchSize; ++i){
-           newNodes->add_element(tmp_nodes[i]);
-           newNodeSideToMove->add_element(tmp_sideToMove[i]);
-           newTrajectories.emplace_back(tmp_trajectories[i]);
-       }
+
+    newNodes->setFullData(nodeQueue->getQueue());
+    newNodeSideToMove->setFullData(nodeQueue->getSideToMove());
+    newTrajectories.insert(newTrajectories.begin(), &tmp_trajectories[0], &tmp_trajectories[searchSettings->largeNetBatchSize]);
 }
 
 void MPVSearchThread::set_nn_results_to_child_nodes()
@@ -95,8 +92,11 @@ void MPVSearchThread::set_is_running(bool value)
 {
     isRunning = value;
     if(!value){
+        newNodes->reset_idx();
+        newTrajectories.clear();
+        newNodeSideToMove->reset_idx();
         nodeQueue->mpvThread_active = false;
-        //nodeQueue->mark_nodes_as_dequeued(); currently disabled
+        nodeQueue->mark_nodes_as_dequeued();
 
     }
     else nodeQueue->mpvThread_active = true;

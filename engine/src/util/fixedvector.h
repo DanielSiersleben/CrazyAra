@@ -135,6 +135,13 @@ public:
     {
         return curIdx;
     }
+
+#ifdef MPV_MCTS
+    void setFullData(T* newData){
+        data = newData;
+        curIdx = maxCapacity;
+    }
+#endif
 };
 
 #endif // FIXEDVECTOR_H

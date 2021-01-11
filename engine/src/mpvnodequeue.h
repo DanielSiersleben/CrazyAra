@@ -16,11 +16,13 @@ private:
     unique_ptr<SideToMove[]> sideToMove;
     unique_ptr<Trajectory[]> trajectories;
 
-    int batchSize;
+    const size_t batchSize;
 
     atomic_int* batchIdx;
     atomic_int* completedIdx;
     mutex* mtx;
+
+    condition_variable* cv;
 
     bool batch_ready;
 
@@ -35,7 +37,9 @@ private:
     unique_ptr<Trajectory[]> trajectoriesBuffer;
 
 public:
-    MPVNodeQueue(size_t batchSize){
+    MPVNodeQueue(size_t batchSize):
+        batchSize(batchSize)
+    {
         queue = make_unique<Node*[]>(batchSize);
         sideToMove = make_unique<SideToMove[]>(batchSize);
         trajectories = make_unique<Trajectory[]>(batchSize);
@@ -63,6 +67,14 @@ public:
 
     Node** getQueue(){
         return queueBuffer.get();
+    }
+
+    size_t getIndex(){
+        return batchIdx->load();
+    }
+
+    size_t getCompletedIndex(){
+        return completedIdx->load();
     }
 
     SideToMove* getSideToMove(){
@@ -106,8 +118,9 @@ public:
         this->unlock();
     }
 
+    // important when ReuseTree is used
     void mark_nodes_as_dequeued(){
-        int lastIdx = batchIdx->load();
+        int lastIdx = completedIdx->load();
         Node** curr = &queue[0];
         Node** last = &queue[lastIdx];
 
@@ -117,7 +130,7 @@ public:
         }
         if(batch_ready){
             curr = &queue[0];
-            last = &queue[batchSize];
+            last = &queue[batchSize-1];
             while(curr != last){
                 (*curr)->disable_node_is_enqueued();
                 curr++;

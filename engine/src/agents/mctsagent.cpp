@@ -327,6 +327,7 @@ void MCTSAgent::run_mcts_search()
         searchThreads[i]->set_search_limits(searchLimits);
 
         if(searchSettings->largeNetStartPhase){
+            searchThreads[i]->SearchThread::reset_stats();
             searchThreads[i]->SearchThread::thread_iteration();
         }
 
