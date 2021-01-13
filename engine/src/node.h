@@ -199,7 +199,7 @@ public:
         else {
 
             // revert virtual loss and update the Q-value
-            d->qValuesSmall[childIdx] = (double(d->qValuesSmall[childIdx]) * d->childNumberVisits[childIdx] + value) / (d->childNumberVisits[childIdx] + 1);
+            d->qValuesSmall[childIdx] = double((d->qValuesSmall[childIdx]) * d->childNumberVisits[childIdx] + value) / (d->childNumberVisits[childIdx] + 1);
             assert(!isnan(d->qValuesSmall[childIdx]));
         }
 
@@ -251,12 +251,14 @@ public:
         valueSumLarge += value;
 
         if(d->qValuesLarge[childIdx] == Q_INIT){
+            assert(!isnan(value));
             d->qValuesLarge[childIdx] = value;
         }
         else{
             // revert virtual loss and update the LargeNet-Q-value
             assert(d->childNumberLargeNetVisits[childIdx] != 0);
-            d->qValuesLarge[childIdx] = (double(d->qValuesLarge[childIdx]) * d->childNumberLargeNetVisits[childIdx] + value) / (d->childNumberLargeNetVisits[childIdx] + 1);
+            assert(d->childNumberLargeNetVisits[childIdx] != -1);
+            d->qValuesLarge[childIdx] = double((d->qValuesLarge[childIdx]) * d->childNumberLargeNetVisits[childIdx] + value) / (d->childNumberLargeNetVisits[childIdx] + 1);
             assert(!isnan(d->qValuesLarge[childIdx]));
         }
 
@@ -273,6 +275,7 @@ public:
 
         unlock();
     }
+
     void update_value_single_mpv(ChildIdx childIdx, float value, float virtualLoss, size_t valueFactor){
 
         lock();

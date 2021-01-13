@@ -95,11 +95,11 @@ void MPVSearchThread::set_is_running(bool value)
         newNodes->reset_idx();
         newTrajectories.clear();
         newNodeSideToMove->reset_idx();
-        nodeQueue->mpvThread_active = false;
-        nodeQueue->mark_nodes_as_dequeued();
 
+        nodeQueue->mpvThread_active->store(false);
+        nodeQueue->mark_nodes_as_dequeued();
     }
-    else nodeQueue->mpvThread_active = true;
+    else nodeQueue->mpvThread_active->store(true);
 }
 
 void fill_mpvnn_results(size_t batchIdx, bool isPolicyMap, const float* valueOutputs, const float* probOutputs, Node *node, size_t& tbHits, SideToMove sideToMove, const SearchSettings* searchSettings)

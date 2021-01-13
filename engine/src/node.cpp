@@ -590,6 +590,7 @@ float Node::get_value() const
 #ifdef MPV_MCTS
 float Node::get_large_net_value() const
 {
+    assert(realLargeNetVisitsSum != 0);
     return valueSumLarge / realLargeNetVisitsSum;
 }
 #endif
@@ -700,11 +701,13 @@ void Node::set_value(float value)
 #ifdef MPV_MCTS
 void Node::set_large_net_value(float value)
 {
+    assert(!isnan(value));
     if(this->realVisitsSum == 0){
         // relevant if starting with largeNet
         this->set_value(value);
     }
     ++this->realLargeNetVisitsSum;
+    assert((realLargeNetVisitsSum != 0));
     this->valueSumLarge = value * this->realLargeNetVisitsSum;
 }
 #endif

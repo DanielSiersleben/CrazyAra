@@ -9,7 +9,7 @@ class MPVSearchThread;
 
 class MPVNodeQueue{
 public:
-    bool mpvThread_active;
+    atomic_bool* mpvThread_active;
 
 private:
     unique_ptr<Node*[]> queue;
@@ -20,9 +20,8 @@ private:
 
     atomic_int* batchIdx;
     atomic_int* completedIdx;
-    mutex* mtx;
 
-    condition_variable* cv;
+    mutex* mtx;
 
     bool batch_ready;
 
@@ -48,10 +47,9 @@ public:
         completedIdx = new atomic_int(0);
         mtx = new mutex();
 
-        this->batchSize = batchSize;
         batch_ready = false;
 
-        mpvThread_active = false;
+        mpvThread_active = new atomic_bool(false);
 
         totalEvals = 0;
 
@@ -101,7 +99,7 @@ public:
     }
 
     void clear(){
-        this->lock();
+        mtx->lock();
         /*
         queue.reset(new Node*[batchSize]);
         sideToMove.reset(new SideToMove[batchSize]);
@@ -115,7 +113,7 @@ public:
         batch_ready = false;
 
         totalEvals = 0;
-        this->unlock();
+        mtx->unlock();
     }
 
     // important when ReuseTree is used
@@ -141,44 +139,44 @@ public:
     int fetch_and_increase_Index(){
        int tmp = batchIdx->fetch_add(1);
 
-       while (tmp >= batchSize) {
-           // wait till Buffer is swapped
-           while (tmp >= batchSize){
-               tmp = batchIdx->load();
-               //cout << "tst" << endl;
+       while (tmp >= batchSize){
+           //wait till all insertion completed
+           while(completedIdx->load() < batchSize && batchIdx->load() >= batchSize){
+               if(!mpvThread_active->load()){
+                   break;
+               }
            }
 
-           tmp = batchIdx->fetch_add(1);
+           // swap pointer of Buffer and Planes
+           if(mtx->try_lock()){
+               if(batchIdx->load() >= batchSize){
+                   swapBuffer();
+               }
+               mtx->unlock();
+           }
+           tmp = batchIdx->fetch_add(1);       
        }
+
 
        return tmp;
     }
 
-    void insert(Node* node, SideToMove side, const Trajectory& trajectory, int index){
-
+    void insert(Node* node, SideToMove side, Trajectory trajectory, int index){
+        assert(index < batchSize);
         this->queue[index] = node;
         this->sideToMove[index] = side;
         this->trajectories[index] = trajectory;
 
         completedIdx->fetch_add(1);
-
-        if(index == batchSize-1){
-            while(completedIdx->load() != batchSize){
-                batchIdx->load();
-                //cout << "waiting" << endl;
-            }
-            // swap pointer of Buffer and Planes
-            swapBuffer();
-        }
     }
 
     void swapBuffer(){
+        assert(batchIdx->load() >= batchSize);
+        assert(completedIdx->load() >= batchSize);
         // make sure Buffer is already completed
-        while(batch_ready && mpvThread_active){
-            batchIdx->load();
-            //cout << "mpvWait" <<endl;
-        };
-
+        while(this->batch_ready){
+            if(!mpvThread_active->load()) break;
+        }
 
         float* tmp = inputPlanes;
         inputPlanes = inputBuffer;
@@ -206,12 +204,6 @@ public:
         return totalEvals;
     }
 
-    void lock(){
-        mtx->lock();
-    }
-    void unlock(){
-        mtx->unlock();
-    }
 };
 
 #endif // MPVNODEQUEUE_H

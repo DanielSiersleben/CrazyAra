@@ -208,18 +208,12 @@ Node* SearchThread::get_new_child_to_evaluate(ChildIdx& childIdx, NodeDescriptio
         if (childIdx == uint16_t(-1)) {
             childIdx = currentNode->select_child_node(searchSettings);
         }
-        currentNode->apply_virtual_loss_to_child(childIdx, searchSettings->virtualLoss);
-        trajectoryBuffer.emplace_back(NodeAndIdx(currentNode, childIdx));
-
-        Node* nextNode = currentNode->get_child_node(childIdx);
-        description.depth++;
 
 #ifdef MPV_MCTS
         if(currentNode->get_real_visits() >= searchSettings->largeNetEvalThreshold && !currentNode->evaluatedByLargeNet())
         {
-            if(currentNode->enable_node_is_enqueued()){
+            if(!currentNode->is_solved() && currentNode->enable_node_is_enqueued()){
                 newState = unique_ptr<StateObj>(rootState->clone());
-                assert(actionsBuffer.size() == description.depth-1);
                 for (Action action : actionsBuffer) {
                     newState->do_action(action);
                 }
@@ -228,13 +222,16 @@ Node* SearchThread::get_new_child_to_evaluate(ChildIdx& childIdx, NodeDescriptio
                 newState->get_state_planes(true, nodeQueue->getInputPlanes()+idx*StateConstants::NB_VALUES_TOTAL());
 
                 Trajectory tmp = trajectoryBuffer;
-                // pop last elem (not part of trajectory)
-                tmp.pop_back();
-
                 nodeQueue->insert(currentNode, newState->side_to_move(), tmp, idx);
             }
         }
 #endif
+
+        currentNode->apply_virtual_loss_to_child(childIdx, searchSettings->virtualLoss);
+        trajectoryBuffer.emplace_back(NodeAndIdx(currentNode, childIdx));
+
+        Node* nextNode = currentNode->get_child_node(childIdx);
+        description.depth++;
 
         if (nextNode == nullptr) {
 #ifdef MCTS_STORE_STATES

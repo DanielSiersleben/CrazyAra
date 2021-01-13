@@ -138,7 +138,9 @@ public:
 
 #ifdef MPV_MCTS
     void setFullData(T* newData){
-        data = newData;
+        for(auto i = 0; i < maxCapacity; i++){
+            data[i] = newData[i];
+        }
         curIdx = maxCapacity;
     }
 #endif
