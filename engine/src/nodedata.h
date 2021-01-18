@@ -79,6 +79,7 @@ struct NodeData
 
     NodeType nodeType;
     bool inspected;
+    NodeData();
     NodeData(size_t numberChildNodes);
 
     auto get_q_values();
