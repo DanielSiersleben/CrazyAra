@@ -105,7 +105,6 @@ NodeBackup SearchThread::add_new_node_to_tree(StateObj* newState, Node* parentNo
             mapWithMutex->mtx.unlock();
             it->second->lock();
             const float qValue =  it->second->get_value();
-
             it->second->add_transposition_parent_node();
             it->second->unlock();
 #ifndef MODE_POMMERMAN
@@ -278,9 +277,18 @@ Node* SearchThread::get_new_child_to_evaluate(ChildIdx& childIdx, NodeDescriptio
         if (nextNode->is_transposition()) {
             nextNode->lock();
             const uint_fast32_t transposVisits = currentNode->get_real_visits(childIdx);
+#ifdef MPV_MCTS
+            const double transposQValue = -currentNode->get_q_sum_small(childIdx, searchSettings->virtualLoss) / transposVisits;
+#else
             const double transposQValue = -currentNode->get_q_sum(childIdx, searchSettings->virtualLoss) / transposVisits;
+#endif
+
             if (nextNode->is_transposition_return(transposQValue)) {
+#ifdef MPV_MCTS
+                const float qValue = get_transposition_q_value(transposVisits, transposQValue, nextNode->get_small_net_value());
+#else
                 const float qValue = get_transposition_q_value(transposVisits, transposQValue, nextNode->get_value());
+#endif
                 nextNode->unlock();
                 description.type = NODE_TRANSPOSITION;
                 transpositionValues->add_element(qValue);

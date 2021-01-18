@@ -140,21 +140,21 @@ public:
        int tmp = batchIdx->fetch_add(1);
 
        while (tmp >= batchSize){
-           //wait till all insertion completed
-           while(completedIdx->load() < batchSize && batchIdx->load() >= batchSize){
-               if(!mpvThread_active->load()){
-                   break;
-               }
+           if(!mpvThread_active->load()){
+               completedIdx->store(0);
+               batchIdx->store(0);
+               tmp = batchIdx->fetch_add(1);
+               break;
            }
 
            // swap pointer of Buffer and Planes
            if(mtx->try_lock()){
-               if(batchIdx->load() >= batchSize){
+               if(batchIdx->load() >= batchSize && completedIdx->load() >= batchSize && mpvThread_active->load()){
                    swapBuffer();
                }
                mtx->unlock();
            }
-           tmp = batchIdx->fetch_add(1);       
+           tmp = batchIdx->fetch_add(1);
        }
 
 
@@ -171,12 +171,15 @@ public:
     }
 
     void swapBuffer(){
-        assert(batchIdx->load() >= batchSize);
-        assert(completedIdx->load() >= batchSize);
         // make sure Buffer is already completed
         while(this->batch_ready){
-            if(!mpvThread_active->load()) break;
+            if(!mpvThread_active->load()){
+                break;
+            }
         }
+
+        assert(batchIdx->load() >= batchSize);
+        assert(completedIdx->load() >= batchSize);
 
         float* tmp = inputPlanes;
         inputPlanes = inputBuffer;

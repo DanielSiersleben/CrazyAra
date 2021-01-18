@@ -40,6 +40,16 @@ double Node::get_q_sum(ChildIdx childIdx, float virtualLoss) const
 {
     return get_child_number_visits(childIdx) * double(get_q_value(childIdx)) + get_virtual_loss_counter(childIdx) * virtualLoss;
 }
+#ifdef MPV_MCTS
+double Node::get_q_sum_small(ChildIdx childIdx, float virtualLoss) const
+{
+    return get_real_visits(childIdx) * double(this->d->qValuesSmall[childIdx]);
+}
+double Node::get_q_sum_large(ChildIdx childIdx, float virtualLoss) const
+{
+    return d->childNumberLargeNetVisits[childIdx] * double(this->d->qValuesLarge[childIdx]);
+}
+#endif
 
 bool Node::is_transposition() const
 {
@@ -96,7 +106,8 @@ Node::Node(StateObj* state, bool inCheck, const SearchSettings* searchSettings):
     valueSumSmall(0),
     valueSumLarge(0),
     realLargeNetVisitsSum(0),
-    largeNetQValueWeight(searchSettings->largeNetQValueWeight/100),
+    largeNetStrength(searchSettings->largeNetStrength),
+    largeNetQValueFactor(0),
 #endif
     legalActions(state->legal_actions()),
     key(state->hash_key()),
@@ -512,7 +523,6 @@ void Node::apply_virtual_loss_to_child(ChildIdx childIdx, float virtualLoss)
 
 float Node::get_q_value(ChildIdx childIdx) const
 {
-
     return d->qValues[childIdx];
 }
 
@@ -581,9 +591,6 @@ void Node::fully_expand_node()
 
 float Node::get_value() const
 {
-#ifdef MPV_MCTS
-    return valueSumSmall / realVisitsSum;
-#endif
     return valueSum / realVisitsSum;
 }
 
@@ -592,6 +599,10 @@ float Node::get_large_net_value() const
 {
     assert(realLargeNetVisitsSum != 0);
     return valueSumLarge / realLargeNetVisitsSum;
+}
+float Node::get_small_net_value() const
+{
+    return valueSumSmall / realVisitsSum;
 }
 #endif
 
@@ -633,6 +644,13 @@ uint32_t Node::get_real_visits(ChildIdx childIdx) const
 {
     return d->childNumberVisits[childIdx] - d->virtualLossCounter[childIdx];
 }
+
+#ifdef MPV_MCTS
+uint32_t Node::get_large_net_visits(ChildIdx childIdx) const
+{
+    return d->childNumberLargeNetVisits[childIdx];
+}
+#endif
 
 void backup_collision(float virtualLoss, const Trajectory& trajectory) {
     for (auto it = trajectory.rbegin(); it != trajectory.rend(); ++it) {
@@ -694,8 +712,12 @@ void Node::set_value(float value)
     ++this->realVisitsSum;
 #ifdef MPV_MCTS
     this->valueSumSmall = value * this->realVisitsSum;
-#endif
+    if(this->valueSum == 0){
+        this->valueSum = value * this->realVisitsSum;
+    }
+#else
     this->valueSum = value * this->realVisitsSum;
+#endif
 }
 
 #ifdef MPV_MCTS
@@ -709,6 +731,9 @@ void Node::set_large_net_value(float value)
     ++this->realLargeNetVisitsSum;
     assert((realLargeNetVisitsSum != 0));
     this->valueSumLarge = value * this->realLargeNetVisitsSum;
+
+    //update valueSum
+    combine_ValueSum();
 }
 #endif
 
@@ -1094,9 +1119,15 @@ void Node::disable_node_is_enqueued(){
 }
 
 void Node::combine_qValues(ChildIdx childIdx){
-    this->d->qValues[childIdx] = (d->qValuesLarge[childIdx] * largeNetQValueWeight + d->qValuesSmall[childIdx] * (1-largeNetQValueWeight));
+    this->d->qValues[childIdx] = (d->qValuesLarge[childIdx] * largeNetQValueFactor + d->qValuesSmall[childIdx] * (1-largeNetQValueFactor));
+}
 
-    valueSum = ((float(valueSumSmall) / realVisitsSum) * (1- largeNetQValueWeight) + ((float(valueSumLarge) / realLargeNetVisitsSum)*largeNetQValueWeight)) * realVisitsSum;
+void Node::combine_ValueSum(){
+    valueSum = ((float(valueSumSmall) / realVisitsSum) * (1- largeNetQValueFactor) + ((float(valueSumLarge) / realLargeNetVisitsSum)*largeNetQValueFactor)) * realVisitsSum;
+}
+
+void Node::adjust_LargeNet_qValue_Factor(size_t smallNetVisitSum, size_t largeNetVisitSum){
+    this->largeNetQValueFactor = std::clamp(float(largeNetVisitSum * largeNetStrength)/(2*smallNetVisitSum), 0.01f, 99.9f);
 }
 #endif
 
@@ -1260,7 +1291,11 @@ uint32_t Node::get_nodes()
 
 bool Node::is_transposition_return(double myQvalue) const
 {
+#ifdef MPV_MCTS
+    return abs(myQvalue - get_small_net_value()) > Q_TRANSPOS_DIFF;
+#else
     return abs(myQvalue - get_value()) > Q_TRANSPOS_DIFF;
+#endif
 }
 
 void Node::set_checkmate_idx(ChildIdx childIdx) const

@@ -628,7 +628,7 @@ void CrazyAra::init_search_settings()
     searchSettings.largeNetEvalThreshold = Options["largeNetThreshold"];
     searchSettings.largeNetStartPhase = Options["largeNetStartPhase"];
     searchSettings.separate_QValues = Options["Use_Separate_QValues"];
-    searchSettings.largeNetQValueWeight = Options["LargeNet_QValue_Weight"];
+    searchSettings.largeNetStrength = Options["Expected_Strength_disparity"];
     searchSettings.sortPolicyLargeNet = Options["sort_policy_largeNet"];
 #endif
     searchSettings.batchSize = Options["Batch_Size"];

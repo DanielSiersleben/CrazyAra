@@ -33,7 +33,7 @@ SearchSettings::SearchSettings():
         largeNetBackpropThreads(1),
         largeNetStartPhase(true),
         separate_QValues(true),
-        largeNetQValueWeight(0.5),
+        largeNetStrength(0),
         sortPolicyLargeNet(true),
     #endif
         threads(2),

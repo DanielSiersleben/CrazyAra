@@ -41,7 +41,8 @@ struct SearchSettings
     size_t largeNetEvalThreshold;
     size_t largeNetBatchSize;
     bool separate_QValues;
-    float largeNetQValueWeight;
+    // equals 1 if largeNet should be weighted as strong as small net
+    size_t largeNetStrength;
     bool sortPolicyLargeNet;
 #endif
     unsigned int batchSize;
