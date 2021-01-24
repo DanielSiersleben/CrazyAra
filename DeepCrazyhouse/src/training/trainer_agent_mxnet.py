@@ -12,13 +12,18 @@ import logging
 import random
 from time import time
 import numpy as np
+import zarr
 from mxboard import SummaryWriter
 from tqdm import tqdm_notebook
-from rtpt import RTPT
+##from rtpt import RTPT
+
+from DeepCrazyhouse.src.domain.util import get_dic_sorted_by_key
 from DeepCrazyhouse.src.domain.variants.plane_policy_representation import FLAT_PLANE_IDX
 from DeepCrazyhouse.src.preprocessing.dataset_loader import load_pgn_dataset
 from DeepCrazyhouse.src.domain.variants.constants import NB_LABELS_POLICY_MAP
 from DeepCrazyhouse.src.training.crossentropy import *
+
+from numcodecs import Blosc
 
 
 def fill_up_batch(x, batch_size):
@@ -28,7 +33,7 @@ def fill_up_batch(x, batch_size):
     :param batch_size: Given batch-size
     :return: Array with length of batch-size
     """
-    return np.repeat(x, batch_size//len(x)+1, axis=0)[:batch_size]
+    return np.repeat(x, batch_size // len(x) + 1, axis=0)[:batch_size]
 
 
 def evaluate_metrics(metrics, data_iterator, model):
@@ -91,7 +96,7 @@ def add_non_sparse_cross_entropy(symbol, grad_scale_value=1.0, value_output_name
 
 
 def remove_no_sparse_cross_entropy(symbol, grad_scale_value=1.0, value_output_name="value_out_output",
-                                 policy_output_name="policy_out_output"):
+                                   policy_output_name="policy_out_output"):
     """
     Removes the last custom cross entropy loss layer to enable loading the model in the C++ API.
     :param symbol: MXNet symbol with both a value and policy head
@@ -131,43 +136,44 @@ def prepare_policy(y_policy, select_policy_from_plane, sparse_policy_label):
 
 class TrainerAgentMXNET:  # Probably needs refactoring
     """Main training loop"""
+
     # x_train = yv_train = yp_train = None
 
     def __init__(
-        self,
-        model,
-        symbol,
-        val_iter,
-        nb_parts,
-        lr_schedule,
-        momentum_schedule,
-        total_it,
-        optimizer_name="nag",  # or "adam"
-        wd=0.0001,
-        batch_steps=1000,
-        k_steps_initial=0,
-        cpu_count=16,
-        batch_size=2048,
-        normalize=True,
-        export_weights=True,
-        export_grad_histograms=True,
-        log_metrics_to_tensorboard=True,
-        ctx=mx.gpu(),
-        metrics=None,  # clip_gradient=60,
-        use_spike_recovery=True,
-        max_spikes=5,
-        spike_thresh=1.5,
-        seed=42,
-        val_loss_factor=0.01,
-        policy_loss_factor=0.99,
-        select_policy_from_plane=True,
-        discount=1,  # 0.995,
-        sparse_policy_label=True,
-        q_value_ratio=0,
-        cwd=None,
-        variant_metrics=None,
-        # prefix for the process name in order to identify the process on a server
-        name_initials="JC"
+            self,
+            model,
+            symbol,
+            val_iter,
+            nb_parts,
+            lr_schedule,
+            momentum_schedule,
+            total_it,
+            optimizer_name="nag",  # or "adam"
+            wd=0.0001,
+            batch_steps=1000,
+            k_steps_initial=0,
+            cpu_count=16,
+            batch_size=2048,
+            normalize=True,
+            export_weights=True,
+            export_grad_histograms=True,
+            log_metrics_to_tensorboard=True,
+            ctx=mx.gpu(),
+            metrics=None,  # clip_gradient=60,
+            use_spike_recovery=True,
+            max_spikes=5,
+            spike_thresh=1.5,
+            seed=42,
+            val_loss_factor=0.01,
+            policy_loss_factor=0.99,
+            select_policy_from_plane=True,
+            discount=1,  # 0.995,
+            sparse_policy_label=True,
+            q_value_ratio=0,
+            cwd=None,
+            variant_metrics=None,
+            # prefix for the process name in order to identify the process on a server
+            name_initials="JC"
     ):
         # Too many instance attributes (29/7) - Too many arguments (24/5) - Too many local variables (25/15)
         # Too few public methods (1/2)
@@ -197,7 +203,7 @@ class TrainerAgentMXNET:  # Probably needs refactoring
         self._seed = seed
         self._val_loss_factor = val_loss_factor
         self._policy_loss_factor = policy_loss_factor
-        self.x_train = self.yv_train = self.yp_train = None
+        self.x_train = self.yv_train = self.yp_train = self.y_value_soft = self.y_policy_soft = None
         self.discount = discount
         self._q_value_ratio = q_value_ratio
         # defines if the policy target is one-hot encoded (sparse=True) or a target distribution (sparse=False)
@@ -213,9 +219,10 @@ class TrainerAgentMXNET:  # Probably needs refactoring
         # Define the two loss functions
         self.optimizer_name = optimizer_name
         if optimizer_name == "adam":
-            self.optimizer = mx.optimizer.Adam(learning_rate=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8, lazy_update=True, rescale_grad=(1.0/batch_size))
+            self.optimizer = mx.optimizer.Adam(learning_rate=0.001, beta1=0.9, beta2=0.999, epsilon=1e-8,
+                                               lazy_update=True, rescale_grad=(1.0 / batch_size))
         elif optimizer_name == "nag":
-            self.optimizer = mx.optimizer.NAG(momentum=momentum_schedule(0), wd=wd, rescale_grad=(1.0/batch_size))
+            self.optimizer = mx.optimizer.NAG(momentum=momentum_schedule(0), wd=wd, rescale_grad=(1.0 / batch_size))
         else:
             raise Exception("%s is currently not supported as an optimizer." % optimizer_name)
         self.ordering = list(range(nb_parts))  # define a list which describes the order of the processed batches
@@ -235,8 +242,8 @@ class TrainerAgentMXNET:  # Probably needs refactoring
         self.variant_metrics = variant_metrics
         self.name_initials = name_initials
         # we use k-steps instead of epochs here
-        self.rtpt = RTPT(name_initials=name_initials, experiment_name='crazyara',
-                         max_iterations=self.k_steps_end-self._k_steps_initial)
+        ##self.rtpt = RTPT(name_initials=name_initials, experiment_name='crazyara',
+        ##                 max_iterations=self.k_steps_end - self._k_steps_initial)
 
     def _log_metrics(self, metric_values, global_step, prefix="train_"):
         """
@@ -252,9 +259,9 @@ class TrainerAgentMXNET:  # Probably needs refactoring
             # add the metrics to the tensorboard event file
             if self._log_metrics_to_tensorboard:
                 self.sum_writer.add_scalar(name, [prefix.replace("_", ""), metric_values[name]],
-                                                        global_step)
+                                           global_step)
 
-    def train(self, cur_it=None):  # Probably needs refactoring
+    def train(self, cur_it=None, use_soft_targets=False, model_abbreviation=None):  # Probably needs refactoring
         """
         Training model
         :param cur_it: Current iteration which is used for the learning rate and momentum schedule.
@@ -288,7 +295,7 @@ class TrainerAgentMXNET:  # Probably needs refactoring
             raise Exception("You must have at least one part file in your planes-dataset directory!")
 
         # Start the RTPT tracking
-        self.rtpt.start()
+        ##self.rtpt.start()
 
         while self.continue_training:  # Too many nested blocks (7/5)
             # reshuffle the ordering of the training game batches (shuffle works in place)
@@ -303,11 +310,21 @@ class TrainerAgentMXNET:  # Probably needs refactoring
             for part_id in tqdm_notebook(self.ordering):
 
                 # load one chunk of the dataset from memory
-                _, self.x_train, self.yv_train, self.yp_train, plys_to_end, _ = load_pgn_dataset(dataset_type="train",
-                                                                                                 part_id=part_id,
-                                                                                                 normalize=self._normalize,
-                                                                                                 verbose=False,
-                                                                                                 q_value_ratio=self._q_value_ratio)
+                if use_soft_targets:
+                    _, self.x_train, self.yv_train, self.yp_train, plys_to_end, _, self.y_value_soft, self.y_policy_soft = load_pgn_dataset(
+                        dataset_type="train",
+                        part_id=part_id,
+                        normalize=self._normalize,
+                        verbose=False,
+                        q_value_ratio=self._q_value_ratio,
+                        model_abbreviation=model_abbreviation)
+                else:
+                    _, self.x_train, self.yv_train, self.yp_train, plys_to_end, _ = load_pgn_dataset(
+                        dataset_type="train",
+                        part_id=part_id,
+                        normalize=self._normalize,
+                        verbose=False,
+                        q_value_ratio=self._q_value_ratio)
                 # fill_up_batch if there aren't enough games
                 if len(self.yv_train) < self._batch_size:
                     logging.info("filling up batch with too few samples %d" % len(self.yv_train))
@@ -316,16 +333,26 @@ class TrainerAgentMXNET:  # Probably needs refactoring
                     self.yp_train = fill_up_batch(self.yp_train, self._batch_size)
                     if plys_to_end is not None:
                         plys_to_end = fill_up_batch(plys_to_end, self._batch_size)
-
-                if self.discount != 1:
-                    self.yv_train *= self.discount**plys_to_end
+                    if use_soft_targets:
+                        self.y_value_soft = fill_up_batch(self.y_value_soft, self._batch_size)
+                        self.y_policy_soft = fill_up_batch(self.y_policy_soft, self._batch_size)
 
                 self.yp_train = prepare_policy(self.yp_train, self.select_policy_from_plane, self.sparse_policy_label)
 
-                self._train_iter = mx.io.NDArrayIter({'data': self.x_train},
-                                                     {'value_label': self.yv_train, 'policy_label': self.yp_train},
-                                                     self._batch_size,
-                                                     shuffle=True)
+                # define targets
+                if use_soft_targets:
+                    self._train_iter = mx.io.NDArrayIter({'data': self.x_train},
+                                                         {'value_label': self.y_value_soft, 'policy_label': self.y_policy_soft},
+                                                         self._batch_size,
+                                                         shuffle=True)
+                else:
+                    if self.discount != 1:
+                        self.yv_train *= self.discount ** plys_to_end
+
+                    self._train_iter = mx.io.NDArrayIter({'data': self.x_train},
+                                                         {'value_label': self.yv_train, 'policy_label': self.yp_train},
+                                                         self._batch_size,
+                                                         shuffle=True)
 
                 # avoid memory leaks by adding synchronization
                 mx.nd.waitall()
@@ -395,7 +422,7 @@ class TrainerAgentMXNET:  # Probably needs refactoring
             self._model,
         )
         # update process title according to loss
-        self.rtpt.step(subtitle=f"loss={self.val_metric_values['loss']:2.2f}")
+        ##self.rtpt.step(subtitle=f"loss={self.val_metric_values['loss']:2.2f}")
         if self._use_spike_recovery and (
                 self.old_val_loss * self._spike_thresh < self.val_metric_values["loss"]
                 or np.isnan(self.val_metric_values["loss"])
@@ -535,10 +562,10 @@ class TrainerAgentMXNET:  # Probably needs refactoring
         for part_id, variant_name in enumerate(self.variant_metrics):
             # load one chunk of the dataset from memory
             _, x_val, yv_val, yp_val, _, _ = load_pgn_dataset(dataset_type="val",
-                                                                         part_id=part_id,
-                                                                         normalize=self._normalize,
-                                                                         verbose=False,
-                                                                         q_value_ratio=self._q_value_ratio)
+                                                              part_id=part_id,
+                                                              normalize=self._normalize,
+                                                              verbose=False,
+                                                              q_value_ratio=self._q_value_ratio)
 
             if self.select_policy_from_plane:
                 val_iter = mx.io.NDArrayIter({'data': x_val}, {'value_label': yv_val,

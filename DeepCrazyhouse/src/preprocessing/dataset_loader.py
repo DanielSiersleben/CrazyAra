@@ -30,7 +30,7 @@ def _load_dataset_file(dataset_filepath):
 
 
 def load_pgn_dataset(
-    dataset_type="train", part_id=0, verbose=True, normalize=False, q_value_ratio=0,
+    dataset_type="train", part_id=0, verbose=True, normalize=False, q_value_ratio=0, model_abbreviation=None
 ):
     """
     Loads one part of the pgn dataset in form of planes / multidimensional numpy array.
@@ -104,4 +104,13 @@ def load_pgn_dataset(
         y_policy = y_policy.astype(np.float32)
         # apply rescaling using a predefined scaling constant (this makes use of vectorized operations)
         x *= MATRIX_NORMALIZER
-    return start_indices, x, y_value, y_policy, plys_to_end, pgn_dataset
+
+    if model_abbreviation is not None:
+        y_value_soft = np.array(pgn_dataset["y_value_prediction_" + model_abbreviation])
+        y_policy_soft = np.array(pgn_dataset["y_policy_prediction_" + model_abbreviation])
+        if normalize:
+            y_value_soft = y_value_soft.astype(np.float32)
+            y_policy_soft = y_policy_soft.astype(np.float32)
+        return start_indices, x, y_value, y_policy, plys_to_end, pgn_dataset, y_value_soft, y_policy_soft
+    else:
+        return start_indices, x, y_value, y_policy, plys_to_end, pgn_dataset
