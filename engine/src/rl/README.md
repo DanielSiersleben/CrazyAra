@@ -36,6 +36,11 @@ nvidia-docker run -it --rm \
 
 ---
 
+
+#### CrazyAra binary
+
+The Dockerfile builds the _CrazyAra_ binary from source with reinforcement learning support at `root/CrazyAra/engine/build/` and moves the binary to the main reinforcement learning directory `/data/RL` where the selfplay games are generated.
+
 #### Network file
 You can download a network which was trained via
  supervised learning as a starting point:
@@ -46,9 +51,20 @@ wget https://github.com/QueensGambit/CrazyAra/releases/download/0.6.0/RISEv2-mob
 unzip RISEv2-mobile.zip
 ```
 
+Alternatively, if a model file is already available on the host machine, you can move the model directory into the mounted docker directory.
+
 #### Selfplay
 
-Next you can start selplay from a given checkpoint file, which is stored in `model/`:
+After all premilirary action have been done, you can finally start selfplay from a given checkpoint file, which is stored in the directory `/data/RL/model/`.
+If you want to start learning from zero knowledge, you may use a set of weights which have initialized randomly.
+
+The python script [**rl_loop.py**](https://github.com/QueensGambit/CrazyAra/blob/master/engine/src/rl/rl_loop.py) is the main script for managing the reinforcement learning loop.
+It can be started in two different modes: a generator mode, and a generator+training mode.
+
+```
+cd /root/CrazyAra/engine/src/rl
+```
+
 
 ##### Generator
 ```shell script
@@ -62,6 +78,10 @@ The gpu trainer will stop generating games and update the network as soon as eno
 ```shell script
 python rl_loop.py --device-id 1 --trainer&
 ```
+
+#### Configuration
+The main configuration files for reinforcement learning can be found at `/root/CrazyAra/DeepCrazyhouse/configs/`:
+*   https://github.com/QueensGambit/CrazyAra/tree/master/DeepCrazyhouse/configs
 
 ---
 
