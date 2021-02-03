@@ -1,0 +1,19 @@
+authorName: Daniel Siersleben
+experimentName: cc Tournament
+trialConcurrency: 1
+maxExecDuration: 100h
+maxTrialNum: 1000
+#choice: local, remote
+trainingServicePlatform: local
+searchSpacePath: C:/Users/Daniel/Desktop/nni_tournament/search_space.json
+#choice: true, false
+useAnnotation: False
+tuner:
+  #choice: TPE, Random, Anneal, Evolution
+  builtinTunerName: GridSearch
+  gpuIndices: "0"
+
+trial:
+  command: C:/Users/Daniel/AppData/Local/Programs/Python/Python38/python.exe tournament_loop.py
+  codeDir: C:/Users/Daniel/Desktop/nni_tournament
+  gpuNum: 1
