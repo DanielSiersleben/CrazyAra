@@ -536,12 +536,8 @@ bool CrazyAra::is_ready()
 #else
         netSingle = create_new_net_single(Options["Model_Directory"]);
         netBatches = create_new_net_batches(Options["Model_Directory"]);
-<<<<<<< HEAD:engine/src/chess_related/crazyara.cpp
-        mctsAgent = create_new_mcts_agent(netSingle.get(), netBatches);
-#endif
-=======
-        mctsAgent = create_new_mcts_agent(netSingle.get(), netBatches, searchSettings);
->>>>>>> nn_gluon_training:engine/src/uci/crazyara.cpp
+;       mctsAgent = create_new_mcts_agent(netSingle.get(), netBatches, searchSettings);
+#endif       
         rawAgent = make_unique<RawNetAgent>(netSingle.get(), &playSettings, false);
         StateConstants::init(mctsAgent->is_policy_map());
         networkLoaded = true;

@@ -200,6 +200,7 @@ void MCTSAgent::create_new_root_node(StateObj* state)
 #else
     fill_nn_results(0, net->is_policy_map(), valueOutputs, probOutputs, rootNode, tbHits, state->side_to_move(), searchSettings);
 #endif
+#endif
     rootNode->prepare_node_for_visits();
 }
 
@@ -457,9 +458,9 @@ void MCTSAgent::export_search_tree(size_t maxDepth, const string& filename)
             << "]" << endl << endl;
 
     outFile << "N0 [label = \"root\","
-           #ifdef MPV_MCTS
+#ifdef MPV_MCTS
             << "shape = doublecircle,"
-            #endif
+#endif
             << " xlabel=\"fen: " << rootState->fen() << "\"]" << endl << endl;
     print_child_nodes_to_file(rootNode, rootState.get(), 0, nodeId, outFile, 1, maxDepth);
     outFile << "}" << endl;
