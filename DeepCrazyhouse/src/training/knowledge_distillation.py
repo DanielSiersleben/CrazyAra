@@ -3,10 +3,12 @@ import os
 import shutil
 
 import mxnet as mx
-import mxnet.contrib.onnx as onnx_mxnet
+# import mxnet.contrib.onnx as onnx_mxnet
 import numpy as np
 import zarr
 from numcodecs import Blosc
+
+import matplotlib.pyplot as plt
 
 from DeepCrazyhouse.src.domain.util import normalize_input_planes
 from DeepCrazyhouse.src.domain.variants.constants import NB_CHANNELS_TOTAL, BOARD_HEIGHT, BOARD_WIDTH
@@ -14,7 +16,8 @@ from DeepCrazyhouse.src.preprocessing.dataset_loader import load_pgn_dataset
 from DeepCrazyhouse.src.training.trainer_agent_mxnet import fill_up_batch, prepare_policy
 
 
-def augment_training_set_for_kd(filepath_to_dataset, filepath_to_symbol, filepath_to_params, batch_size, filepath_to_kd_data=None,
+def augment_training_set_for_kd(filepath_to_dataset, filepath_to_symbol, filepath_to_params, batch_size,
+                                filepath_to_kd_data=None,
                                 model_abbreviation=None):
     """
     Creates a Dataset for Knowledge Distillation using Value and Policy output from the given
@@ -46,7 +49,8 @@ def augment_training_set_for_kd(filepath_to_dataset, filepath_to_symbol, filepat
     ##load the model
     symbol = mx.sym.load(filepath_to_symbol)
     model = mx.mod.Module(symbol=symbol, context=mx.gpu(), label_names=['value_label', 'policy_label'])
-    model.bind(for_training=False, data_shapes=[('data', (batch_size, input_shape[0], input_shape[1], input_shape[2]))], label_shapes=train_iter.provide_label)
+    model.bind(for_training=False, data_shapes=[('data', (batch_size, input_shape[0], input_shape[1], input_shape[2]))],
+               label_shapes=train_iter.provide_label)
     model.load_params(filepath_to_params)
 
     if filepath_to_kd_data is None:
@@ -70,7 +74,7 @@ def augment_training_set_for_kd(filepath_to_dataset, filepath_to_symbol, filepat
         x = x.astype(np.float32)
         x *= normalize_input_planes(np.ones((NB_CHANNELS_TOTAL, BOARD_HEIGHT, BOARD_WIDTH)))
 
-        y_policy = np.ndarray(shape=(len(x), yp_train.shape[1]))
+        y_policy = np.ndarray(shape=(len(x), yp_train.shape[1]), dtype=np.float16)
         y_value = np.ndarray(shape=[len(x)])
 
         if len(x) < batch_size:
@@ -85,17 +89,22 @@ def augment_training_set_for_kd(filepath_to_dataset, filepath_to_symbol, filepat
 
             indices = np.arange(start=iteration * batch_size, stop=(iteration + 1) * batch_size, step=1)
 
-            if indices[-1] >= len(x):
+            value, policy = model.get_outputs()
+            policy = policy.asnumpy()
+            value = value.asnumpy()
+            policy[abs(policy) < 1e-3] = 0
+
+            if indices[-1] >= len(x):  # last iteration of file
                 indices = np.arange(start=iteration * batch_size, stop=len(x), step=1)
                 indices_local = np.arange(0, len(indices))
-                value, policy = model.get_outputs()
-                y_value[indices] = value.asnumpy()[indices_local, 0]
-                y_policy[indices, :] = policy.asnumpy()[indices_local, :]
+
+                y_value[indices] = value[indices_local, 0]
+                y_policy[indices, :] = policy[indices_local, :]
 
             else:
-                value, policy = model.get_outputs()
-                y_value[indices] = value.asnumpy()[:, 0]
-                y_policy[indices, :] = policy.asnumpy()
+                y_value[indices] = value[:, 0]
+                y_policy[indices, :] = policy
+
             iteration += 1
 
         # define the compressor object
@@ -117,9 +126,15 @@ def augment_training_set_for_kd(filepath_to_dataset, filepath_to_symbol, filepat
         store.close()
 
 
+def clip_quantile(distribution, q):
+    quantile_val = np.quantile(distribution, q)
+    distribution[abs(distribution) < q] = 0
+    return distribution
+
+
 augment_training_set_for_kd(
-    filepath_to_dataset=r"C:\Users\Daniel\Desktop\UNI\BSC Thesis\Train_data\planes\train\2018-09-27-10-43-39",
-    filepath_to_kd_data=r"E:\KD_DATA",
+    #filepath_to_dataset=r"C:\Users\Daniel\Desktop\UNI\BSC Thesis\Train_data\planes\train\2018-09-27-10-43-39",
+    filepath_to_dataset=r"E:\KD_DATA_old",
     filepath_to_symbol=r"C:\Users\Daniel\Desktop\UNI\BSC Thesis\nn\risev2_27_blocks_crazyhouse\model\model-1.17985-0.606-symbol.json",
     filepath_to_params=r"C:\Users\Daniel\Desktop\UNI\BSC Thesis\nn\risev2_27_blocks_crazyhouse\model\model-1.17985-0.606-0212.params",
     batch_size=1024,
