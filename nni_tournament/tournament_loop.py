@@ -19,8 +19,10 @@ logging.basicConfig()
 def run_tournament(input_dict):
     contender_arg = ["-engine", tournament_config["con_name"], tournament_config["con_cmd"],
                      tournament_config["con_dir"]]
+    contender_arg.extend(tournament_config["con_model_dir"])
     baseline_arg = ["-engine", tournament_config["base_name"], tournament_config["base_cmd"],
                     tournament_config["base_dir"]]
+    baseline_arg.extend(tournament_config["base_model_dir"])
     each_arg = ["-each", "option.Context=gpu", tournament_config["proto"], "tc=50/10", tournament_config["batch_size"],
                 tournament_config["threads"], tournament_config["move_overhead"], tournament_config["mcts_solver"],
                 tournament_config["multipv"]]

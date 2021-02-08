@@ -1,3 +1,7 @@
 {
-  "Fixed_Movetime":{"_type":"quniform", "_value": [10,100,10]}
+  "largeNetThreshold":{"_type":"choice", "_value": [50]},
+  "Expected_Strength_disparity":{"_type":"quniform", "_value": [1,10,1]},
+  "Fixed_Movetime": {"_type": "choice", "_value": [10]},
+  "Reuse_Tree": {"_type": "choice", "_value": ["false"]},
+  "Use_Transposition_Table": {"_type": "choice", "_value": ["false"]}
 }

@@ -3,12 +3,14 @@ tournament_config = {
     # Baseline:
     "base_name": "name=Baseline",
     "base_cmd": "cmd=CrazyAra.exe",
-    "base_dir": "dir=C:/Users/Daniel/MPVCrazyAra/CrazyAra/builds/buildSmallNet",
+    "base_model_dir": ["option.Model_Directory=model/standard_net"],
+    "base_dir": "dir=C:/Users/Daniel/MPVCrazyAra/CrazyAra/builds/buildStandard",
 
     # Contender:
     "con_name": "name=Contender",
     "con_cmd": "cmd=CrazyAra.exe",
-    "con_dir": r"dir=C:\Users\Daniel\MPVCrazyAra\CrazyAra\builds\buildLargeNet",
+    "con_model_dir":  ["option.Small_Model_Directory=model/small_net", "option.Large_Model_Directory=model/large_net"],
+    "con_dir": r"dir=C:\Users\Daniel\MPVCrazyAra\CrazyAra\builds\buildMPV",
 
     # each:
     "proto": "proto=uci",
@@ -18,15 +20,15 @@ tournament_config = {
     "mcts_solver": "option.MCTS_Solver=true",
     "multipv": "option.MultiPV=1",
 
-    "mpv_engine": "",  ## "" (None), c (contender), b (baseline), both
+    "mpv_engine": "c",  ## "" (None), c (contender), b (baseline), both
 
     "variant": "crazyhouse",
-    "games": "50",
+    "games": "500",
     "rounds": "2",
     "repeat": "2",
 
     # openings
-    "file": "file=D:/Program Files (x86)/Cute Chess/books-master/crazyhouse_mix_cp_130.epd",
+    "file": r"file=D:/Program Files (x86)/Cute Chess/books-master/crazyhouse_mix_cp_130.epd",
     "file_format": "format=epd",
     "order": "order=random",
 
