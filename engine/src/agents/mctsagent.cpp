@@ -186,6 +186,11 @@ void MCTSAgent::create_new_root_node(StateObj* state)
 #else
     rootNode = new Node(state, false, searchSettings);
 #endif
+#ifdef SEARCH_UCT
+    unique_ptr<StateObj> newState = unique_ptr<StateObj>(state->clone());
+    rootNode->set_value(newState->random_rollout());
+    rootNode->enable_has_nn_results();
+#else
     state->get_state_planes(true, inputPlanes);
     net->predict(inputPlanes, valueOutputs, probOutputs);
     size_t tbHits = 0;

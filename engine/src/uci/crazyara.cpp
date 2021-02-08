@@ -1,0 +1,701 @@
+/*
+  CrazyAra, a deep learning chess variant engine
+  Copyright (C) 2018       Johannes Czech, Moritz Willig, Alena Beyer
+  Copyright (C) 2019-2020  Johannes Czech
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+/*
+ * @file: crazyara.cpp
+ * Created on 12.06.2019
+ * @author: queensgambit
+ */
+
+#include "crazyara.h"
+
+#include "bitboard.h"
+#include "position.h"
+#include "search.h"
+#include "thread.h"
+#include "tt.h"
+#include "uci.h"
+#include "syzygy/tbprobe.h"
+#include "movegen.h"
+#include "search.h"
+#include "evalinfo.h"
+#include "constants.h"
+#include "state.h"
+#include "variants.h"
+#include "optionsuci.h"
+#include "../tests/benchmarkpositions.h"
+#include "util/communication.h"
+#ifdef MXNET
+#include "nn/mxnetapi.h"
+#elif defined TENSORRT
+#include "nn/tensorrtapi.h"
+#endif
+
+CrazyAra::CrazyAra():
+    rawAgent(nullptr),
+    mctsAgent(nullptr),
+    netSingle(nullptr),         // will be initialized in is_ready()
+#ifdef USE_RL
+    netSingleContender(nullptr),
+    mctsAgentContender(nullptr),
+#endif
+    searchSettings(SearchSettings()),
+    searchLimits(SearchLimits()),
+    playSettings(PlaySettings()),
+#ifdef MODE_CRAZYHOUSE
+    variant(CRAZYHOUSE_VARIANT),
+#else
+    variant(CHESS_VARIANT),
+#endif
+    useRawNetwork(false),      // will be initialized in init_search_settings()
+    networkLoaded(false),
+    ongoingSearch(false),
+#ifdef SUPPORT960
+    is960(true),
+#else
+    is960(false)
+#endif
+{
+}
+
+CrazyAra::~CrazyAra()
+{
+}
+
+void CrazyAra::welcome()
+{
+    cout << intro << endl;
+}
+
+void CrazyAra::uci_loop(int argc, char *argv[])
+{
+    unique_ptr<StateObj> state = make_unique<StateObj>();
+    string token, cmd;
+    EvalInfo evalInfo;
+    auto uiThread = make_shared<Thread>(0);
+
+    variant = UCI::variant_from_name(Options["UCI_Variant"]);
+    state->set(StartFENs[variant], is960, variant);
+
+    for (int i = 1; i < argc; ++i)
+        cmd += string(argv[i]) + " ";
+
+    size_t it = 0;
+
+	// this is debug vector which can contain uci commands which will be automatically processed when the executable is launched
+    vector<string> commands = {
+        "isready",
+        "setoption name UCI_Variant value crazyhouse",
+        "ucinewgame",
+        "position fen rnbqkbnr/1ppp1ppp/p3p3/8/3P4/4P3/PPP1BPPP/RNBQK1NR[-] b KQkq - 0 1",
+        "isready",
+        "go wtime 61000 btime 61000 winc 1000 binc 1000 movestogo 50",
+        "position fen rnbqkbnr/1ppp1ppp/p3p3/8/3P4/4P3/PPP1BPPP/RNBQK1NR[-] b KQkq - 0 1 moves b7b5 b1d2",
+        "isready",
+        "go wtime 61972 btime 61940 winc 1000 binc 1000 movestogo 49",
+        "position fen rnbqkbnr/1ppp1ppp/p3p3/8/3P4/4P3/PPP1BPPP/RNBQK1NR[-] b KQkq - 0 1 moves b7b5 b1d2 c8b7 e2f3",
+        "isready",
+        "go wtime 62943 btime 62880 winc 1000 binc 1000 movestogo 48",
+        "position fen rnbqkbnr/1ppp1ppp/p3p3/8/3P4/4P3/PPP1BPPP/RNBQK1NR[-] b KQkq - 0 1 moves b7b5 b1d2 c8b7 e2f3 b8c6 g1h3",
+        "isready",
+        "go wtime 63914 btime 63818 winc 1000 binc 1000 movestogo 47",
+        "position fen rnbqkbnr/1ppp1ppp/p3p3/8/3P4/4P3/PPP1BPPP/RNBQK1NR[-] b KQkq - 0 1 moves b7b5 b1d2 c8b7 e2f3 b8c6 g1h3 d8h4 h3f4",
+        "isready",
+        "go wtime 64885 btime 64756 winc 1000 binc 1000 movestogo 46",
+        "position fen rnbqkbnr/1ppp1ppp/p3p3/8/3P4/4P3/PPP1BPPP/RNBQK1NR[-] b KQkq - 0 1 moves b7b5 b1d2 c8b7 e2f3 b8c6 g1h3 d8h4 h3f4 g8f6 d4d5",
+        "isready",
+        "go wtime 65856 btime 65696 winc 1000 binc 1000 movestogo 45",
+        "position fen rnbqkbnr/1ppp1ppp/p3p3/8/3P4/4P3/PPP1BPPP/RNBQK1NR[-] b KQkq - 0 1 moves b7b5 b1d2 c8b7 e2f3 b8c6 g1h3 d8h4 h3f4 g8f6 d4d5 e6d5 f4d5",
+        "isready",
+        "go wtime 66828 btime 66634 winc 1000 binc 1000 movestogo 44",
+        "position fen rnbqkbnr/1ppp1ppp/p3p3/8/3P4/4P3/PPP1BPPP/RNBQK1NR[-] b KQkq - 0 1 moves b7b5 b1d2 c8b7 e2f3 b8c6 g1h3 d8h4 h3f4 g8f6 d4d5 e6d5 f4d5 f6d5 f3d5",
+        "isready",
+        "go wtime 67799 btime 67572 winc 1000 binc 1000 movestogo 43",
+        "position fen rnbqkbnr/1ppp1ppp/p3p3/8/3P4/4P3/PPP1BPPP/RNBQK1NR[-] b KQkq - 0 1 moves b7b5 b1d2 c8b7 e2f3 b8c6 g1h3 d8h4 h3f4 g8f6 d4d5 e6d5 f4d5 f6d5 f3d5 P@e6 d5f3",
+        "isready",
+        "go wtime 68771 btime 68511 winc 1000 binc 1000 movestogo 42",
+        "position fen rnbqkbnr/1ppp1ppp/p3p3/8/3P4/4P3/PPP1BPPP/RNBQK1NR[-] b KQkq - 0 1 moves b7b5 b1d2 c8b7 e2f3 b8c6 g1h3 d8h4 h3f4 g8f6 d4d5 e6d5 f4d5 f6d5 f3d5 P@e6 d5f3 N@g5 P@g3",
+        "isready",
+        "go wtime 69742 btime 69449 winc 1000 binc 1000 movestogo 41",
+        " setoption name UCI_Variant value crazyhouse",
+        " ucinewgame",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1",
+        " isready",
+        " go wtime 61000 btime 61000 winc 1000 binc 1000 movestogo 50",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4",
+        " isready",
+        " go wtime 61971 btime 61940 winc 1000 binc 1000 movestogo 49",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2",
+        " isready",
+        " go wtime 62942 btime 62879 winc 1000 binc 1000 movestogo 48",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3",
+        " isready",
+        " go wtime 63913 btime 63817 winc 1000 binc 1000 movestogo 47",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3",
+        " isready",
+        " go wtime 64885 btime 64756 winc 1000 binc 1000 movestogo 46",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1",
+        " isready",
+        " go wtime 65857 btime 65694 winc 1000 binc 1000 movestogo 45",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3",
+        " isready",
+        " go wtime 66828 btime 66634 winc 1000 binc 1000 movestogo 44",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6",
+        " isready",
+        " go wtime 67799 btime 67571 winc 1000 binc 1000 movestogo 43",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4",
+        " isready",
+        " go wtime 68770 btime 68510 winc 1000 binc 1000 movestogo 42",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3",
+        " isready",
+        " go wtime 69740 btime 69450 winc 1000 binc 1000 movestogo 41",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2",
+        " isready",
+        " go wtime 70711 btime 70389 winc 1000 binc 1000 movestogo 40",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1",
+        " isready",
+        " go wtime 71682 btime 71327 winc 1000 binc 1000 movestogo 39",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4",
+        " isready",
+        " go wtime 72653 btime 72266 winc 1000 binc 1000 movestogo 38",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4",
+        " isready",
+        " go wtime 73625 btime 73205 winc 1000 binc 1000 movestogo 37",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4 d6c4 e2c4",
+        " isready",
+        " go wtime 74596 btime 74143 winc 1000 binc 1000 movestogo 36",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4 d6c4 e2c4 P@d5 f4d5",
+        " isready",
+        " go wtime 75566 btime 75082 winc 1000 binc 1000 movestogo 35",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4 d6c4 e2c4 P@d5 f4d5 B@e6 N@f4",
+        " isready",
+        " go wtime 76538 btime 76022 winc 1000 binc 1000 movestogo 34",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4 d6c4 e2c4 P@d5 f4d5 B@e6 N@f4 e6d5 f4d5",
+        " isready",
+        " go wtime 77509 btime 76962 winc 1000 binc 1000 movestogo 33",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4 d6c4 e2c4 P@d5 f4d5 B@e6 N@f4 e6d5 f4d5 e4d5 c4d5",
+        " isready",
+        " go wtime 78480 btime 77902 winc 1000 binc 1000 movestogo 32",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4 d6c4 e2c4 P@d5 f4d5 B@e6 N@f4 e6d5 f4d5 e4d5 c4d5 d8d5 B@b3",
+        " isready",
+        " go wtime 79451 btime 78841 winc 1000 binc 1000 movestogo 31",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4 d6c4 e2c4 P@d5 f4d5 B@e6 N@f4 e6d5 f4d5 e4d5 c4d5 d8d5 B@b3 d5b3 a2b3",
+        " isready",
+        " go wtime 80422 btime 79779 winc 1000 binc 1000 movestogo 30",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4 d6c4 e2c4 P@d5 f4d5 B@e6 N@f4 e6d5 f4d5 e4d5 c4d5 d8d5 B@b3 d5b3 a2b3 B@e4 P@d7",
+        " isready",
+        " go wtime 81393 btime 80716 winc 1000 binc 1000 movestogo 29",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4 d6c4 e2c4 P@d5 f4d5 B@e6 N@f4 e6d5 f4d5 e4d5 c4d5 d8d5 B@b3 d5b3 a2b3 B@e4 P@d7 B@f5 d7e8q",
+        " isready",
+        " go wtime 82364 btime 81653 winc 1000 binc 1000 movestogo 28",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4 d6c4 e2c4 P@d5 f4d5 B@e6 N@f4 e6d5 f4d5 e4d5 c4d5 d8d5 B@b3 d5b3 a2b3 B@e4 P@d7 B@f5 d7e8q a8e8 B@c4",
+        " isready",
+        " go wtime 83335 btime 82592 winc 1000 binc 1000 movestogo 27",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4 d6c4 e2c4 P@d5 f4d5 B@e6 N@f4 e6d5 f4d5 e4d5 c4d5 d8d5 B@b3 d5b3 a2b3 B@e4 P@d7 B@f5 d7e8q a8e8 B@c4 P@d5 c4e2",
+        " isready",
+        " go wtime 84306 btime 83528 winc 1000 binc 1000 movestogo 26",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4 d6c4 e2c4 P@d5 f4d5 B@e6 N@f4 e6d5 f4d5 e4d5 c4d5 d8d5 B@b3 d5b3 a2b3 B@e4 P@d7 B@f5 d7e8q a8e8 B@c4 P@d5 c4e2 N@d3 P@e5",
+        " isready",
+        " go wtime 85277 btime 84467 winc 1000 binc 1000 movestogo 25",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4 d6c4 e2c4 P@d5 f4d5 B@e6 N@f4 e6d5 f4d5 e4d5 c4d5 d8d5 B@b3 d5b3 a2b3 B@e4 P@d7 B@f5 d7e8q a8e8 B@c4 P@d5 c4e2 N@d3 P@e5 d3f2 f1f2",
+        " isready",
+        " go wtime 86248 btime 85406 winc 1000 binc 1000 movestogo 24",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4 d6c4 e2c4 P@d5 f4d5 B@e6 N@f4 e6d5 f4d5 e4d5 c4d5 d8d5 B@b3 d5b3 a2b3 B@e4 P@d7 B@f5 d7e8q a8e8 B@c4 P@d5 c4e2 N@d3 P@e5 d3f2 f1f2 P@g3 f2f1",
+        " isready",
+        " go wtime 87217 btime 86345 winc 1000 binc 1000 movestogo 23",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4 d6c4 e2c4 P@d5 f4d5 B@e6 N@f4 e6d5 f4d5 e4d5 c4d5 d8d5 B@b3 d5b3 a2b3 B@e4 P@d7 B@f5 d7e8q a8e8 B@c4 P@d5 c4e2 N@d3 P@e5 d3f2 f1f2 P@g3 f2f1 f6e5 d4e5",
+        " isready",
+        " go wtime 88188 btime 87283 winc 1000 binc 1000 movestogo 22",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4 d6c4 e2c4 P@d5 f4d5 B@e6 N@f4 e6d5 f4d5 e4d5 c4d5 d8d5 B@b3 d5b3 a2b3 B@e4 P@d7 B@f5 d7e8q a8e8 B@c4 P@d5 c4e2 N@d3 P@e5 d3f2 f1f2 P@g3 f2f1 f6e5 d4e5 P@h2 g1h1",
+        " isready",
+        " go wtime 89160 btime 88219 winc 1000 binc 1000 movestogo 21",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4 d6c4 e2c4 P@d5 f4d5 B@e6 N@f4 e6d5 f4d5 e4d5 c4d5 d8d5 B@b3 d5b3 a2b3 B@e4 P@d7 B@f5 d7e8q a8e8 B@c4 P@d5 c4e2 N@d3 P@e5 d3f2 f1f2 P@g3 f2f1 f6e5 d4e5 P@h2 g1h1 e4f3 e2f3",
+        " isready",
+        " go wtime 90132 btime 89159 winc 1000 binc 1000 movestogo 20",
+        " position fen rnbqkb1r/ppp1pppp/5n2/3p2B1/3P4/5N2/PPP1PPPP/RN1QKB1R[-] b KQkq - 0 1 moves h7h6 g5h4 g7g6 b1d2 f8g7 e2e3 e8g8 f1d3 b8c6 e1g1 c8g4 h2h3 g4h5 h4f6 e7f6 N@f4 h5f3 d2f3 B@e4 B@e2 N@d6 a1c1 f8e8 c2c4 d5c4 d3c4 d6c4 e2c4 P@d5 f4d5 B@e6 N@f4 e6d5 f4d5 e4d5 c4d5 d8d5 B@b3 d5b3 a2b3 B@e4 P@d7 B@f5 d7e8q a8e8 B@c4 P@d5 c4e2 N@d3 P@e5 d3f2 f1f2 P@g3 f2f1 f6e5 d4e5 P@h2 g1h1 e4f3 e2f3 N@f2 f1f2",
+        " isready",
+        " go wtime 91103 btime 90097 winc 1000 binc 1000 movestogo 19"
+
+    };
+    commands = {};
+
+
+    do {
+
+        if (it < commands.size()) {
+            cmd = commands[it];
+            cout << ">>" << cmd << endl;
+        }
+        else if (argc == 1 && !getline(cin, cmd)) // Block here waiting for input or EOF
+            cmd = "quit";
+
+        istringstream is(cmd);
+
+        token.clear(); // Avoid a stale if getline() returns empty or blank line
+        is >> skipws >> token;
+
+        if (token == "stop" || token == "quit") {
+            stop_search();
+		}
+		else if (token == "uci") {
+			cout << engine_info()
+				<< Options << endl
+				<< "uciok" << endl;
+		}
+        else if (token == "setoption")  OptionsUCI::setoption(is);
+        else if (token == "go")         go(state.get(), is, evalInfo);
+        else if (token == "position")   position(state.get(), is);
+        else if (token == "ucinewgame") ucinewgame();
+        else if (token == "isready") {
+            if (is_ready()) {
+                cout << "readyok" << endl;
+            }
+        }
+
+        // Additional custom non-UCI commands, mainly for debugging
+        else if (token == "benchmark")  benchmark(is);
+        else if (token == "root")       mctsAgent->print_root_node();
+        else if (token == "tree")      export_search_tree(is);
+        else if (token == "flip")       state->flip();
+        else if (token == "d")          cout << *(state.get()) << endl;
+#ifdef USE_RL
+        else if (token == "selfplay")   selfplay(is);
+        else if (token == "arena")      arena(is);
+#endif
+        else
+            cout << "Unknown command: " << cmd << endl;
+
+        ++it;
+    } while (token != "quit" && argc == 1); // Command line args are one-shot
+
+    wait_to_finish_last_search();
+}
+
+void CrazyAra::go(StateObj* state, istringstream &is,  EvalInfo& evalInfo) {
+    searchLimits.reset();
+    searchLimits.moveOverhead = TimePoint(Options["Move_Overhead"]);
+    searchLimits.nodes = Options["Nodes"];
+    searchLimits.movetime = Options["Fixed_Movetime"];
+    searchLimits.simulations = Options["Simulations"];
+
+    string token;
+    bool ponderMode = false;
+
+    searchLimits.startTime = now(); // As early as possible!
+
+    while (is >> token) {
+        if (token == "searchmoves")
+            while (is >> token);
+        else if (token == "wtime")     is >> searchLimits.time[WHITE];
+        else if (token == "btime")     is >> searchLimits.time[BLACK];
+        else if (token == "winc")      is >> searchLimits.inc[WHITE];
+        else if (token == "binc")      is >> searchLimits.inc[BLACK];
+        else if (token == "movestogo") is >> searchLimits.movestogo;
+        else if (token == "depth")     is >> searchLimits.depth;
+        else if (token == "nodes")     is >> searchLimits.nodes;
+        else if (token == "movetime")  is >> searchLimits.movetime;
+        else if (token == "infinite")  searchLimits.infinite = true;
+        else if (token == "ponder")    ponderMode = true;
+    }
+
+    wait_to_finish_last_search();
+
+    ongoingSearch = true;
+    if (useRawNetwork) {
+        rawAgent->set_search_settings(state, &searchLimits, &evalInfo);
+        mainSearchThread = thread(run_agent_thread, rawAgent.get());
+    }
+    else {
+        mctsAgent->set_search_settings(state, &searchLimits, &evalInfo);
+        mainSearchThread = thread(run_agent_thread, mctsAgent.get());
+    }
+}
+
+void CrazyAra::go(const string& fen, string goCommand, EvalInfo& evalInfo)
+{
+    unique_ptr<StateObj> state = make_unique<StateObj>();
+    string token, cmd;
+    variant = UCI::variant_from_name(Options["UCI_Variant"]);
+
+    state->set(StartFENs[variant], is960, variant);
+
+    istringstream is("fen " + fen);
+    position(state.get(), is);
+    istringstream isGoCommand(goCommand);
+    go(state.get(), isGoCommand, evalInfo);
+    wait_to_finish_last_search();
+}
+
+void CrazyAra::wait_to_finish_last_search()
+{
+    if (ongoingSearch) {
+        mainSearchThread.join();
+        ongoingSearch = false;
+    }
+}
+
+void CrazyAra::stop_search()
+{
+    if (mctsAgent != nullptr) {
+        mctsAgent->stop();
+    }
+}
+
+void CrazyAra::position(StateObj* state, istringstream& is)
+{
+    wait_to_finish_last_search();
+
+    Action action;
+    string token, fen;
+    variant = UCI::variant_from_name(Options["UCI_Variant"]);
+
+    is >> token;
+    if (token == "startpos")
+    {
+        fen = StartFENs[variant];
+        is >> token; // Consume "moves" token if any
+    }
+    else if (token == "fen") {
+        while (is >> token && token != "moves")
+            fen += token + " ";
+        fen = fen.substr(0, fen.length()-1);  // remove last ' ' to avoid parsing problems
+    }
+    else
+        return;
+
+    auto uiThread = make_shared<Thread>(0);
+    state->set(fen, is960, variant);
+    Action lastMove = ACTION_NONE;
+
+    // Parse move list (if any)
+    while (is >> token && (action = state->uci_to_action(token)) != ACTION_NONE)
+    {
+        state->do_action(action);
+        lastMove = action;
+    }
+    // inform the mcts agent of the move, so the tree can potentially be reused later
+    if (lastMove != MOVE_NULL && !useRawNetwork) {
+        mctsAgent->apply_move_to_tree(lastMove, false);
+    }
+    info_string("position", state->fen());
+}
+
+void CrazyAra::benchmark(istringstream &is)
+{
+    int passedCounter = 0;
+    EvalInfo evalInfo;
+    BenchmarkPositions benchmark;
+    string moveTime;
+    is >> moveTime;
+    string goCommand = "go movetime " + moveTime;
+    int totalNPS = 0;
+    int totalDepth = 0;
+    vector<int> nps;
+
+    for (TestPosition pos : benchmark.positions) {
+        go(pos.fen, goCommand, evalInfo);
+        string uciMove = StateConstants::action_to_uci(evalInfo.bestMove, false);
+        if (uciMove != pos.blunderMove) {
+            cout << "passed      -- " << uciMove << " != " << pos.blunderMove << endl;
+            passedCounter++;
+        }
+        else {
+            cout << "failed      -- " << uciMove << " == " << pos.blunderMove << endl;
+        }
+        cout << "alternative -- ";
+        if (uciMove == pos.alternativeMove) {
+            cout << uciMove << " == " << pos.alternativeMove << endl;
+        }
+        else {
+            cout << uciMove << " != " << pos.alternativeMove << endl;
+        }
+        const int cur_nps = evalInfo.calculate_nps();
+        totalNPS += cur_nps;
+        totalDepth += evalInfo.depth;
+        nps.push_back(cur_nps);
+    }
+
+    sort(nps.begin(), nps.end());
+
+    cout << endl << "Summary" << endl;
+    cout << "----------------------" << endl;
+    cout << "Passed:\t\t" << passedCounter << "/" << benchmark.positions.size() << endl;
+    cout << "NPS (avg):\t" << setw(2) << totalNPS /  benchmark.positions.size() << endl;
+    cout << "NPS (median):\t" << setw(2) << nps[nps.size()/2] << endl;
+    cout << "PV-Depth:\t" << setw(2) << totalDepth /  benchmark.positions.size() << endl;
+}
+
+void CrazyAra::export_search_tree(istringstream &is)
+{
+    string depth, filename;
+    is >> depth;
+    is >> filename;
+    if (depth == "") {
+        mctsAgent->export_search_tree(2, "tree.gv");
+        return;
+    }
+    if (filename == "") {
+        mctsAgent->export_search_tree(std::stoi(depth), "tree.gv");
+        return;
+    }
+    mctsAgent->export_search_tree(std::stoi(depth), filename);
+}
+
+#ifdef USE_RL
+void CrazyAra::selfplay(istringstream &is)
+{
+    SearchLimits searchLimits;
+    searchLimits.nodes = size_t(Options["Nodes"]);
+    SelfPlay selfPlay(rawAgent.get(), mctsAgent.get(), &searchLimits, &playSettings, &rlSettings);
+    size_t numberOfGames;
+    is >> numberOfGames;
+    selfPlay.go(numberOfGames, variant);
+    cout << "readyok" << endl;
+}
+
+void CrazyAra::arena(istringstream &is)
+{
+    SearchLimits searchLimits;
+    searchLimits.nodes = size_t(Options["Nodes"]);
+    SelfPlay selfPlay(rawAgent.get(), mctsAgent.get(), &searchLimits, &playSettings, &rlSettings);
+    netSingle = create_new_net_single(Options["Model_Directory_Contender"]);
+    netBatches = create_new_net_batches(Options["Model_Directory_Contender"]);
+    mctsAgentContender = create_new_mcts_agent(netSingle.get(), netBatches, searchSettings);
+    size_t numberOfGames;
+    is >> numberOfGames;
+    TournamentResult tournamentResult = selfPlay.go_arena(mctsAgentContender.get(), numberOfGames, variant);
+
+    cout << "Arena summary" << endl;
+    cout << "Score of Contender vs Producer: " << tournamentResult << endl;
+    if (tournamentResult.score() > 0.5f) {
+        cout << "replace" << endl;
+    }
+    else {
+        cout << "keep" << endl;
+    }
+    write_tournament_result_to_csv(tournamentResult, "arena_results.csv");
+}
+
+void CrazyAra::init_rl_settings()
+{
+    rlSettings.numberChunks = Options["Selfplay_Number_Chunks"];
+    rlSettings.chunkSize = Options["Selfplay_Chunk_Size"];
+    rlSettings.quickSearchNodes = Options["Quick_Nodes"];
+    rlSettings.quickSearchProbability = Options["Centi_Quick_Probability"] / 100.0f;
+    rlSettings.quickSearchQValueWeight = Options["Centi_Quick_Q_Value_Weight"] / 100.0f;
+    rlSettings.lowPolicyClipThreshold = Options["Milli_Policy_Clip_Thresh"] / 1000.0f;
+    rlSettings.quickDirichletEpsilon = Options["Centi_Quick_Dirichlet_Epsilon"] / 100.0f;
+    rlSettings.nodeRandomFactor = Options["Centi_Node_Random_Factor"] / 100.0f;
+    rlSettings.rawPolicyProbabilityTemperature = Options["Centi_Raw_Prob_Temperature"] / 100.0f;
+    rlSettings.resignProbability = Options["Centi_Resign_Probability"] / 100.0f;
+    rlSettings.resignThreshold = Options["Centi_Resign_Threshold"] / 100.0f;
+    rlSettings.reuseTreeForSelpay = Options["Reuse_Tree"];
+}
+#endif
+
+void CrazyAra::init()
+{
+    OptionsUCI::init(Options);
+    Bitboards::init();
+    Position::init();
+    Bitbases::init();
+    Search::init();
+    Tablebases::init(UCI::variant_from_name(Options["UCI_Variant"]), Options["SyzygyPath"]);
+}
+
+bool CrazyAra::is_ready()
+{
+    if (!networkLoaded) {
+        init_search_settings();
+        init_play_settings();
+#ifdef USE_RL
+        init_rl_settings();
+#endif
+#ifdef MPV_MCTS
+        netSingle = create_new_net_single(Options["Large_Model_Directory"]);
+        netBatches = create_new_net_batches(Options["Small_Model_Directory"]);
+
+        mpvNetBatches = create_new_mpvnet_batches(Options["Large_Model_Directory"]);
+        mctsAgent = create_new_mpvmcts_agent(netSingle.get(), netBatches, mpvNetBatches);
+#else
+        netSingle = create_new_net_single(Options["Model_Directory"]);
+        netBatches = create_new_net_batches(Options["Model_Directory"]);
+<<<<<<< HEAD:engine/src/chess_related/crazyara.cpp
+        mctsAgent = create_new_mcts_agent(netSingle.get(), netBatches);
+#endif
+=======
+        mctsAgent = create_new_mcts_agent(netSingle.get(), netBatches, searchSettings);
+>>>>>>> nn_gluon_training:engine/src/uci/crazyara.cpp
+        rawAgent = make_unique<RawNetAgent>(netSingle.get(), &playSettings, false);
+        StateConstants::init(mctsAgent->is_policy_map());
+        networkLoaded = true;
+    }
+    wait_to_finish_last_search();
+    return networkLoaded;
+}
+
+void CrazyAra::ucinewgame()
+{
+    if (networkLoaded) {
+        wait_to_finish_last_search();
+        mctsAgent->clear_game_history();
+        cout << "info string newgame" << endl;
+    }
+}
+
+string CrazyAra::engine_info()
+{
+    stringstream ss;
+    ss << "id name " << engineName << " " << engineVersion << " (" << __DATE__ << ")" << "\n";
+    ss << "id author " << engineAuthors;
+    return ss.str();
+}
+
+unique_ptr<NeuralNetAPI> CrazyAra::create_new_net_single(const string& modelDirectory)
+{
+#ifdef MXNET
+    return make_unique<MXNetAPI>(Options["Context"], int(Options["First_Device_ID"]), 1, modelDirectory, false);
+#elif defined TENSORRT
+    return make_unique<TensorrtAPI>(int(Options["First_Device_ID"]), 1, modelDirectory, Options["Precision"]);
+#endif
+    return nullptr;
+}
+
+#ifdef MPV_MCTS
+vector<unique_ptr<NeuralNetAPI>> CrazyAra::create_new_mpvnet_batches(const string& modelDirectory){
+    vector<unique_ptr<NeuralNetAPI>> mpvNetBatches;
+
+    for (int deviceId = int(Options["First_Device_ID"]); deviceId <= int(Options["Last_Device_ID"]); ++deviceId) {
+        for (size_t i = 0; i < size_t(Options["MPVThreads"]); ++i) {
+            mpvNetBatches.push_back(make_unique<TensorrtAPI>(deviceId, searchSettings.largeNetBatchSize, modelDirectory, Options["Precision"]));
+        }
+    }
+    return mpvNetBatches;
+}
+
+unique_ptr<MCTSAgent> CrazyAra::create_new_mpvmcts_agent(NeuralNetAPI* smallNetSingle, vector<unique_ptr<NeuralNetAPI>>& netBatches, vector<unique_ptr<NeuralNetAPI>>& mpvNetBatches)
+{
+    return make_unique<MPVMCTSAgent>(smallNetSingle, netBatches, mpvNetBatches, &searchSettings, &playSettings);
+}
+#endif
+
+vector<unique_ptr<NeuralNetAPI>> CrazyAra::create_new_net_batches(const string& modelDirectory)
+{
+    vector<unique_ptr<NeuralNetAPI>> netBatches;
+#ifdef MXNET
+    #ifdef TENSORRT
+        const bool useTensorRT = bool(Options["Use_TensorRT"]);
+    #else
+        const bool useTensorRT = false;
+    #endif
+#endif
+    for (int deviceId = int(Options["First_Device_ID"]); deviceId <= int(Options["Last_Device_ID"]); ++deviceId) {
+        for (size_t i = 0; i < size_t(Options["Threads"]); ++i) {
+    #ifdef MXNET
+            netBatches.push_back(make_unique<MXNetAPI>(Options["Context"], deviceId, searchSettings.batchSize, modelDirectory, useTensorRT));
+    #elif defined TENSORRT
+            netBatches.push_back(make_unique<TensorrtAPI>(deviceId, searchSettings.batchSize, modelDirectory, Options["Precision"]));
+    #endif
+        }
+    }
+    return netBatches;
+}
+
+unique_ptr<MCTSAgent> CrazyAra::create_new_mcts_agent(NeuralNetAPI* netSingle, vector<unique_ptr<NeuralNetAPI>>& netBatches, SearchSettings& searchSettings)
+{
+    return make_unique<MCTSAgent>(netSingle, netBatches, &searchSettings, &playSettings);
+}
+
+void CrazyAra::init_search_settings()
+{
+    validate_device_indices(Options);
+    searchSettings.multiPV = Options["MultiPV"];
+    searchSettings.threads = Options["Threads"] * get_num_gpus(Options);
+#ifdef MPV_MCTS
+    searchSettings.largeNetBackpropThreads = Options["largeNetBackpropThreads"];
+    searchSettings.largeNetBatchSize = Options["largeNetBatchSize"];
+    searchSettings.mpvThreads = Options["mpvThreads"] * get_num_gpus(Options);
+    searchSettings.largeNetEvalThreshold = Options["largeNetThreshold"];
+    searchSettings.largeNetStartPhase = Options["largeNetStartPhase"];
+    searchSettings.separate_QValues = Options["Use_Separate_QValues"];
+    searchSettings.largeNetStrength = Options["Expected_Strength_disparity"];
+    searchSettings.sortPolicyLargeNet = Options["sort_policy_largeNet"];
+#endif
+    searchSettings.batchSize = Options["Batch_Size"];
+    searchSettings.useTranspositionTable = Options["Use_Transposition_Table"];
+//    searchSettings.uInit = float(Options["Centi_U_Init_Divisor"]) / 100.0f;     currently disabled
+//    searchSettings.uMin = Options["Centi_U_Min"] / 100.0f;                      currently disabled
+//    searchSettings.uBase = Options["U_Base"];                                   currently disabled
+    searchSettings.qValueWeight = Options["Centi_Q_Value_Weight"] / 100.0f;
+    searchSettings.enhanceChecks = Options["Enhance_Checks"];
+//    searchSettings.enhanceCaptures = Options["Enhance_Captures"];               //currently disabled
+    searchSettings.cpuctInit = Options["Centi_CPuct_Init"] / 100.0f;
+    searchSettings.cpuctBase = Options["CPuct_Base"];
+    searchSettings.dirichletEpsilon = Options["Centi_Dirichlet_Epsilon"] / 100.0f;
+    searchSettings.dirichletAlpha = Options["Centi_Dirichlet_Alpha"] / 100.0f;
+    searchSettings.nodePolicyTemperature = Options["Centi_Node_Temperature"] / 100.0f;
+    searchSettings.virtualLoss = Options["Centi_Virtual_Loss"] / 100.0f;
+    searchSettings.qThreshInit = Options["Centi_Q_Thresh_Init"] / 100.0f;
+    searchSettings.qThreshMax = Options["Centi_Q_Thresh_Max"] / 100.0f;
+    searchSettings.qThreshBase = Options["Q_Thresh_Base"];
+    searchSettings.randomMoveFactor = Options["Centi_Random_Move_Factor"]  / 100.0f;
+    searchSettings.allowEarlyStopping = Options["Allow_Early_Stopping"];
+    useRawNetwork = Options["Use_Raw_Network"];
+#ifdef SUPPORT960
+    is960 = Options["UCI_Chess960"];
+#endif
+    searchSettings.useNPSTimemanager = Options["Use_NPS_Time_Manager"];
+    searchSettings.useRandomPlayout = Options["Random_Playout"];
+    if (string(Options["SyzygyPath"]).empty() || string(Options["SyzygyPath"]) == "<empty>") {
+        searchSettings.useTablebase = false;
+    }
+    else {
+        searchSettings.useTablebase = true;
+    }
+    searchSettings.reuseTree = Options["Reuse_Tree"];
+    searchSettings.mctsSolver = Options["MCTS_Solver"];
+}
+
+void CrazyAra::init_play_settings()
+{
+    playSettings.initTemperature = Options["Centi_Temperature"] / 100.0f;
+    playSettings.temperatureMoves = Options["Temperature_Moves"];
+    playSettings.temperatureDecayFactor = Options["Centi_Temperature_Decay"] / 100.0f;
+    playSettings.quantileClipping = Options["Centi_Quantile_Clipping"] / 100.0f;
+#ifdef USE_RL
+    playSettings.meanInitPly = Options["MeanInitPly"];
+    playSettings.maxInitPly = Options["MaxInitPly"];
+#endif
+}
+
+size_t get_num_gpus(OptionsMap& option)
+{
+    return size_t(option["Last_Device_ID"] - option["First_Device_ID"] + 1);
+}
+
+void validate_device_indices(OptionsMap& option)
+{
+    if (option["Last_Device_ID"] < option["First_Device_ID"]) {
+        info_string("Last_Device_ID:", option["Last_Device_ID"]);
+        info_string("First_Device_ID:", option["First_Device_ID"]);
+        info_string("Last_Device_ID is smaller than First_Device_ID.");
+        info_string("Last_Device_ID will be set to ", option["First_Device_ID"]);
+        option["Last_Device_ID"] = option["First_Device_ID"];
+    }
+}
