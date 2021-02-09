@@ -83,7 +83,12 @@ void MPVSearchThread::set_is_running(bool value)
 
 void fill_mpvnn_results(size_t batchIdx, bool isPolicyMap, const float* valueOutputs, const float* probOutputs, Node *node, size_t& tbHits, SideToMove sideToMove, const SearchSettings* searchSettings)
 {
-    node->set_probabilities_for_moves(get_policy_data_batch(batchIdx, probOutputs, isPolicyMap), sideToMove);
+    if (node->has_nn_results()) {
+        node->update_probabilities_for_moves(get_policy_data_batch(batchIdx, probOutputs, isPolicyMap), sideToMove, searchSettings->largeNetPolicyWeight);
+    }
+    else {
+        node->set_probabilities_for_moves(get_policy_data_batch(batchIdx, probOutputs, isPolicyMap), sideToMove);
+    }
     node_post_process_policy(node, searchSettings->nodePolicyTemperature, isPolicyMap, searchSettings);
     node->set_large_net_value(valueOutputs[batchIdx]);
 

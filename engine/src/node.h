@@ -384,6 +384,10 @@ public:
 
     void set_probabilities_for_moves(const float *data, SideToMove sideToMove);
 
+#ifdef MPV_MCTS
+    void update_probabilities_for_moves(const float* data, SideToMove sideToMove, float updateFactor);
+#endif
+
     void apply_softmax_to_policy();
 
     /**

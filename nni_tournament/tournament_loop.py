@@ -39,7 +39,7 @@ def run_tournament(input_dict):
             each_arg.append(input_dict[key])
     etc_arg = ["-games", tournament_config["games"], "-rounds", tournament_config["rounds"], "-variant",
                tournament_config["variant"], "-openings", tournament_config["file"], tournament_config["file_format"],
-               tournament_config["order"]]
+               tournament_config["order"], "-epdout", tournament_config["epd_out"], "-pgnout", tournament_config["pgn_out"]]
     arguments = [tournament_config["cli_dir"]] + contender_arg + baseline_arg + each_arg + etc_arg
 
     process = Popen(arguments, stdout=PIPE, stderr=STDOUT, shell=True, text=True)
@@ -76,9 +76,9 @@ def run_tournament(input_dict):
 
 
 mpv_options = [
-    "largeNetThreshold",
-    "sortPolicy",
-    "startLarge",
+    "LargeNetThreshold",
+    "LargeNetPolicyWeight",
+    "LargeNetStartPhase",
     "Expected_Strength_disparity"
 ]
 

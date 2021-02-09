@@ -958,6 +958,27 @@ void Node::set_probabilities_for_moves(const float *data, SideToMove sideToMove)
     }
 }
 
+#ifdef MPV_MCTS
+void Node::update_probabilities_for_moves(const float* data, SideToMove sideToMove, float updateFactor)
+{
+    // allocate sufficient memory -> is assumed that it has already been done
+    assert(legalActions.size() == policyProbSmall.size());
+    for (size_t mvIdx = 0; mvIdx < legalActions.size(); ++mvIdx) {
+        // retrieve vector index from look-up table
+        // set the right prob value
+        // accessing the data on the raw floating point vector is faster
+        // than calling policyProb.At(batchIdx, vectorIdx)
+        if (sideToMove == FIRST_PLAYER_IDX) {
+            // use the look-up table for the first player
+            policyProbSmall[mvIdx] = (1-updateFactor) * policyProbSmall[mvIdx] + updateFactor * data[StateConstants::action_to_index<normal, notMirrored>(legalActions[mvIdx])];
+        }
+        else {
+            policyProbSmall[mvIdx] = (1 - updateFactor) * policyProbSmall[mvIdx] + updateFactor * data[StateConstants::action_to_index<normal, mirrored>(legalActions[mvIdx])];
+        }
+    }
+}
+#endif
+
 void Node::apply_softmax_to_policy()
 {
     policyProbSmall = softmax(policyProbSmall);
