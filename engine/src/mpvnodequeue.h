@@ -29,7 +29,7 @@ private:
 
     float* inputPlanes;
 
-    // store nodes here while inputPlanes is processed by GPU
+    // store nodes in Buffer while inputPlanes is processed by GPU
     float* inputBuffer;
     unique_ptr<Node*[]> queueBuffer;
     unique_ptr<SideToMove[]> sideToMoveBuffer;
@@ -100,13 +100,6 @@ public:
 
     void clear(){
         mtx->lock();
-        /*
-        queue.reset(new Node*[batchSize]);
-        sideToMove.reset(new SideToMove[batchSize]);
-        trajectories.reset(new Trajectory[batchSize]);
-        queueBuffer.reset(new Node*[batchSize]);
-        sideToMoveBuffer.reset(new SideToMove[batchSize]);
-        trajectoriesBuffer.reset(new Trajectory[batchSize]);*/
 
         batchIdx->store(0);
         completedIdx->store(0);

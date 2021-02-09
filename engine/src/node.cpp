@@ -1151,11 +1151,12 @@ void Node::combine_qValues(ChildIdx childIdx){
 }
 
 void Node::combine_ValueSum(){
-    valueSum = ((float(valueSumSmall) / realVisitsSum) * (1- largeNetQValueFactor) + ((float(valueSumLarge) / realLargeNetVisitsSum)*largeNetQValueFactor)) * realVisitsSum;
+    valueSum = ((double(valueSumSmall * (1 - this->largeNetQValueFactor)) / realVisitsSum) + ((double(valueSumLarge * this->largeNetQValueFactor) / realLargeNetVisitsSum))) * realVisitsSum;
 }
 
 void Node::adjust_LargeNet_qValue_Factor(size_t smallNetVisitSum, size_t largeNetVisitSum){
-    this->largeNetQValueFactor = std::clamp(float(largeNetVisitSum * largeNetStrength)/(2*smallNetVisitSum), 0.01f, 0.5f);
+    float largeNetWeightedSum = largeNetVisitSum * largeNetStrength;
+    this->largeNetQValueFactor = std::clamp(float(largeNetWeightedSum) / (smallNetVisitSum + largeNetWeightedSum), 0.01f, 0.5f);
 }
 #endif
 

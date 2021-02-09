@@ -156,11 +156,11 @@ void OptionsUCI::init(OptionsMap &o)
     o["Quick_Nodes"]                   << Option(100, 0, 99999);
 #endif
 #ifdef MPV_MCTS
-    o["MPVThreads"]                    << Option(1, 1, 512);
+    o["MPVThreads"]                    << Option(1, 1, 1); //currently forced to 1
     o["MPV_Evaluation_Threshold"]      << Option(75, 3, 999999);
     o["LargeNetBatchSize"]             << Option(16, 1, 8192);
     o["LargeNetStartPhase"]            << Option(true);
-    o["Expected_Strength_disparity"]   << Option(32, 1, 100);
+    o["Expected_Strength_disparity"]   << Option(32, 0, 1000);
     o["Small_Model_Directory"]         << Option("model/small_net");
     o["Large_Model_Directory"]         << Option("model/large_net");
     o["LargeNet_Policy_Weight"]        << Option(100,0,100);

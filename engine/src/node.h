@@ -195,7 +195,6 @@ public:
             // set new Q-value based on return
             // (the initialization of the Q-value was by Q_INIT which we don't want to recover.)
             d->qValuesSmall[childIdx] = value;
-
         }
         else {
 
@@ -471,7 +470,7 @@ public:
     bool enable_node_is_enqueued();
     void disable_node_is_enqueued();
     void combine_qValues(ChildIdx childIdx);
-    void  combine_ValueSum();
+    void combine_ValueSum();
     void adjust_LargeNet_qValue_Factor(size_t smallNetVisitSum, size_t largeNetVisitSum);
 #endif
 
