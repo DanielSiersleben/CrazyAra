@@ -1134,7 +1134,7 @@ void Node::combine_ValueSum(){
 }
 
 void Node::adjust_LargeNet_qValue_Factor(size_t smallNetVisitSum, size_t largeNetVisitSum){
-    this->largeNetQValueFactor = std::clamp(float(largeNetVisitSum * largeNetStrength)/(2*smallNetVisitSum), 0.01f, 99.9f);
+    this->largeNetQValueFactor = std::clamp(float(largeNetVisitSum * largeNetStrength)/(2*smallNetVisitSum), 0.01f, 0.5f);
 }
 #endif
 

@@ -11,10 +11,6 @@ MPVSearchThread::MPVSearchThread(NeuralNetAPI* netBatch, SearchSettings* searchS
      newNodeSideToMove = make_unique<FixedVector<SideToMove>>(searchSettings->largeNetBatchSize);
 
      nodeQueue->setInputPlanesAndBuffer(inputPlanes, inputBuffer);
-     this->workerThreads = new thread*[searchSettings->largeNetBackpropThreads];
-}
-MPVSearchThread::~MPVSearchThread(){
-    delete[] workerThreads;
 }
 
 void MPVSearchThread::create_mpv_mini_batch()
@@ -32,7 +28,7 @@ void MPVSearchThread::set_nn_results_to_child_nodes()
     for (auto node: *newNodes) {
         if (!node->is_terminal()) {
             fill_mpvnn_results(batchIdx, net->is_policy_map(), valueOutputs, probOutputs, node, tbHits, newNodeSideToMove->get_element(batchIdx), searchSettings);
-            if(this->searchSettings->sortPolicyLargeNet) node->sort_not_expanded_moves_by_probabilities();
+            node->sort_not_expanded_moves_by_probabilities();
         }
         ++batchIdx;
     }
@@ -55,34 +51,17 @@ void MPVSearchThread::thread_iteration()
     }
 }
 
-void backup_mpvnet_values(FixedVector<Node*>* nodes, const vector<Trajectory>& trajectories, atomic_int* idx, SearchSettings* searchSettings)
-{
-    int i;
-    while((i = idx->fetch_add(1)) < nodes->size()){
-        const Node* node = nodes->get_element(i);
-
-        backup_mpv_value<false>(node->get_large_net_value(), searchSettings->virtualLoss, trajectories[i], false, searchSettings->separate_QValues, searchSettings->largeNetEvalThreshold);
-
-    }
-}
-
 void MPVSearchThread::backup_value_outputs()
 {
-    const vector<Trajectory>& trajectories = newTrajectories;
-    atomic_int* idx = new atomic_int(0);
-    if(searchSettings->largeNetBackpropThreads > 1){
-        for(auto i = 0; i < searchSettings->largeNetBackpropThreads; ++i){
-            workerThreads[i] = new thread(backup_mpvnet_values, newNodes.get(), trajectories, idx, searchSettings);
-        }
-
-        for(auto i = 0; i < searchSettings->largeNetBackpropThreads; ++i){
-            workerThreads[i]->join();
-        }
+    for (size_t idx = 0; idx < newNodes->size(); ++idx) {
+        Node* node = newNodes->get_element(idx);
+#ifdef MCTS_TB_SUPPORT
+        const bool solveForTerminal = searchSettings->mctsSolver && node->is_tablebase();
+        backup_value<false,true>(node->get_value(), searchSettings->virtualLoss, trajectories[idx], solveForTerminal);
+#else
+        backup_value<false, true>(node->get_large_net_value(), searchSettings->virtualLoss, newTrajectories[idx], false);
+#endif
     }
-    else{
-        backup_mpvnet_values(newNodes.get(), trajectories, idx, searchSettings);
-    }
-
 
     newNodes->reset_idx();
     newTrajectories.clear();

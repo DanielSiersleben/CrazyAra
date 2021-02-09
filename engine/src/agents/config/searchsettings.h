@@ -36,14 +36,12 @@ struct SearchSettings
     size_t threads;
 #ifdef MPV_MCTS
     bool largeNetStartPhase;
-    size_t largeNetBackpropThreads;
     size_t mpvThreads;
     size_t largeNetEvalThreshold;
     size_t largeNetBatchSize;
-    bool separate_QValues;
     // equals 1 if largeNet should be weighted as strong as small net
     size_t largeNetStrength;
-    bool sortPolicyLargeNet;
+    float largeNetPolicyWeight;
 #endif
     unsigned int batchSize;
     float dirichletEpsilon;

@@ -34,7 +34,6 @@ using namespace std;
 void on_logger(const Option& o) {
     start_logger(o);
 }
-
 void OptionsUCI::init(OptionsMap &o)
 {
     o["Allow_Early_Stopping"]          << Option(true);
@@ -42,17 +41,6 @@ void OptionsUCI::init(OptionsMap &o)
     o["Batch_Size"]                    << Option(8, 1, 8192);
 #else
     o["Batch_Size"]                    << Option(16, 1, 8192);
-#endif
-    o["Threads"]                       << Option(2, 1, 512);
-#ifdef MPV_MCTS
-    o["MPVThreads"]                    << Option(1, 1, 512);
-    o["largeNetBackpropThreads"]       << Option(1, 1 , 10);
-    o["largeNetThreshold"]             << Option(75, 3, 999999);
-    o["largeNetBatchSize"]             << Option(16, 1, 8192);
-    o["largeNetStartPhase"]            << Option(true);
-    o["sort_policy_largeNet"]          << Option(true);
-    o["Use_Separate_QValues"]          << Option(true);
-    o["Expected_Strength_disparity"]        << Option(32, 1, 100);
 #endif
     o["Centi_CPuct_Init"]              << Option(250, 1, 99999);
 #ifdef USE_RL
@@ -92,22 +80,20 @@ void OptionsUCI::init(OptionsMap &o)
     o["Context"]                       << Option("cpu");
 #endif
     o["CPuct_Base"]                    << Option(19652, 1, 99999);
-    o["Allow_Early_Stopping"]          << Option(false);
-    o["Use_Raw_Network"]               << Option(false);
     o["Enhance_Checks"]                << Option(false);
 //    o["Enhance_Captures"]              << Option(false);         currently disabled
-    o["Use_Transposition_Table"]       << Option(true);
-#ifdef TENSORRT
-    o["Use_TensorRT"]                  << Option(true);
-    o["Precision"]                     << Option("float16", {"float32", "float16", "int8"});
-#endif
-#ifdef MPV_MCTS
-    o["Small_Model_Directory"]         << Option("model/small_net");
-    o["Large_Model_Directory"]         << Option("model/large_net");
-#elif MODE_CRAZYHOUSE
-    o["Model_Directory"]               << Option("model/large_net");
+    o["First_Device_ID"]               << Option(0, 0, 99999);
+    o["Fixed_Movetime"]                << Option(0, 0, 99999999);
+    o["Last_Device_ID"]                << Option(0, 0, 99999);
+    o["Log_File"]                      << Option("", on_logger);
+    o["Max_Search_Depth"]              << Option(99, 1, 99999);
+    o["MCTS_Solver"]                   << Option(true);
+#ifndef MPV_MCTS
+#ifdef MODE_CRAZYHOUSE
+    o["Model_Directory"]               << Option("model");
 #else
     o["Model_Directory"]               << Option("model");
+#endif
 #endif
     o["Move_Overhead"]                 << Option(20, 0, 5000);
     o["MultiPV"]                       << Option(1, 1, 99999);
@@ -116,18 +102,11 @@ void OptionsUCI::init(OptionsMap &o)
 #else
     o["Nodes"]                         << Option(0, 0, 99999999);
 #endif
-    o["Move_Overhead"]                 << Option(0, 0, 5000);
-    o["Centi_Random_Move_Factor"]      << Option(0, 0, 99);
-    o["SyzygyPath"]                    << Option("<empty>");
-    o["Log_File"]                      << Option("", on_logger);
-    o["Use_NPS_Time_Manager"]          << Option(false);
-    o["Use_Advantage"]                 << Option(false);
-#ifdef SUPPORT960
-    o["UCI_Chess960"]                  << Option(true);
+#ifdef TENSORRT
+    o["Precision"]                     << Option("float16", {"float32", "float16", "int8"});
 #endif
     o["Q_Thresh_Base"]                 << Option(1965, 0, 99999);
     o["Random_Playout"]                << Option(false);
-    o["Fixed_Movetime"]                << Option(1000, 0, 99999999);
 #ifdef USE_RL
     o["Reuse_Tree"]                    << Option(false);
 #else
@@ -176,8 +155,17 @@ void OptionsUCI::init(OptionsMap &o)
     o["Milli_Policy_Clip_Thresh"]      << Option(0, 0, 100);
     o["Quick_Nodes"]                   << Option(100, 0, 99999);
 #endif
+#ifdef MPV_MCTS
+    o["MPVThreads"]                    << Option(1, 1, 512);
+    o["MPV_Evaluation_Threshold"]      << Option(75, 3, 999999);
+    o["LargeNetBatchSize"]             << Option(16, 1, 8192);
+    o["LargeNetStartPhase"]            << Option(true);
+    o["Expected_Strength_disparity"]   << Option(32, 1, 100);
+    o["Small_Model_Directory"]         << Option("model/small_net");
+    o["Large_Model_Directory"]         << Option("model/large_net");
+    o["LargeNet_Policy_Weight"]        << Option(100,0,100);
+#endif  
 }
-
 void OptionsUCI::setoption(istringstream &is)
 {
 

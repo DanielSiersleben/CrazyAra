@@ -30,11 +30,9 @@ SearchSettings::SearchSettings():
         mpvThreads(1),
         largeNetEvalThreshold(1000),
         largeNetBatchSize(64),
-        largeNetBackpropThreads(1),
         largeNetStartPhase(true),
-        separate_QValues(true),
         largeNetStrength(0),
-        sortPolicyLargeNet(true),
+        largeNetPolicyWeight(0),
     #endif
         threads(2),
         batchSize(2),
