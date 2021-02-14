@@ -42,6 +42,9 @@ NeuralNetAPIUser::NeuralNetAPIUser(NeuralNetAPI *net, bool allocate_inputBuffer)
     CHECK(cudaMallocHost((void**) &probOutputs, net->get_policy_output_length() * sizeof(float)));
     if(allocate_inputBuffer) CHECK(cudaMallocHost((void**) &inputBuffer, net->get_batch_size() * StateConstants::NB_VALUES_TOTAL() * sizeof(float)));
 
+    if (StateConstants::NB_AUXILIARY_OUTPUTS()) {
+        CHECK(cudaMallocHost((void**) &auxiliaryOutputs, net->get_batch_size() * StateConstants::NB_AUXILIARY_OUTPUTS() * sizeof(float)));
+    }
 #else
     inputPlanes = new float[net->get_batch_size() * StateConstants::NB_VALUES_TOTAL()];
     valueOutputs = new float[net->get_batch_size()];
@@ -57,10 +60,16 @@ NeuralNetAPIUser::~NeuralNetAPIUser()
     CHECK(cudaFreeHost(valueOutputs));
     CHECK(cudaFreeHost(probOutputs));
     if(allocate_inputBuffer) CHECK(cudaFreeHost(inputBuffer));
+    if (StateConstants::NB_AUXILIARY_OUTPUTS()) {
+        CHECK(cudaFreeHost(auxiliaryOutputs));
+    }
 #else
     delete [] inputPlanes;
     delete [] valueOutputs;
     delete [] probOutputs;
     if(allocate_inputBuffer) delete [] inputBuffer;
+    if (StateConstants::NB_AUXILIARY_OUTPUTS()) {
+        delete [] auxiliaryOutputs;
+    }
 #endif
 }
