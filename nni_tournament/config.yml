@@ -5,7 +5,7 @@ maxExecDuration: 10h
 maxTrialNum: 1000
 #choice: local, remote
 trainingServicePlatform: local
-searchSpacePath: C:/Users/Daniel/Desktop/nni_tournament/search_space.json
+searchSpacePath: C:/Users/Daniel/MPVCrazyAra/CrazyAra/nni_tournament/search_space.json
 #choice: true, false
 useAnnotation: False
 tuner:

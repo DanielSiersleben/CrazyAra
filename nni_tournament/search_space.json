@@ -1,7 +1,8 @@
 {
-  "largeNetThreshold":{"_type":"choice", "_value": [50]},
-  "Expected_Strength_disparity":{"_type":"quniform", "_value": [1,10,1]},
-  "Fixed_Movetime": {"_type": "choice", "_value": [10]},
+  "MPV_Evaluation_Threshold":{"_type":"choice", "_value": [50]},
+  "Expected_Strength_disparity":{"_type":"choice", "_value": [100]},
+  "LargeNet_Policy_Weight": {"_type":"choice", "_value": [90,100]},
+  "Fixed_Movetime": {"_type": "choice", "_value": [100]},
   "Reuse_Tree": {"_type": "choice", "_value": ["false"]},
   "Use_Transposition_Table": {"_type": "choice", "_value": ["false"]}
 }

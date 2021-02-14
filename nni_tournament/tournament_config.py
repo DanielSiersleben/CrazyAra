@@ -9,7 +9,7 @@ tournament_config = {
     # Contender:
     "con_name": "name=Contender",
     "con_cmd": "cmd=CrazyAra.exe",
-    "con_model_dir":  ["option.Small_Model_Directory=model/small_net", "option.Large_Model_Directory=model/standard_net"],
+    "con_model_dir":  ["option.Small_Model_Directory=model/standard_net", "option.Large_Model_Directory=model/large_net"],
     "con_dir": r"dir=C:\Users\Daniel\MPVCrazyAra\CrazyAra\builds\buildMPV",
 
     # each:
@@ -25,7 +25,7 @@ tournament_config = {
     "epd_out": r"D:\Program Files (x86)\Cute Chess\Tournaments\nni_epd.epd",
     "pgn_out": r"D:\Program Files (x86)\Cute Chess\Tournaments\nni_pgn.pgn",
     "variant": "crazyhouse",
-    "games": "200",
+    "games": "50",
     "rounds": "2",
     "repeat": "2",
 

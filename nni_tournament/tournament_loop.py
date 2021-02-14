@@ -76,8 +76,8 @@ def run_tournament(input_dict):
 
 
 mpv_options = [
-    "LargeNetThreshold",
-    "LargeNetPolicyWeight",
+    "MPV_Evaluation_Threshold",
+    "LargeNet_Policy_Weight",
     "LargeNetStartPhase",
     "Expected_Strength_disparity"
 ]
