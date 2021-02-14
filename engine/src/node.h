@@ -869,7 +869,9 @@ void backup_value(float value, float virtualLoss, const Trajectory& trajectory, 
     for (auto it = trajectory.rbegin(); it != trajectory.rend(); ++it) {
         if (targetQValue != 0) {
             uint_fast32_t transposVisits;
+#ifdef MPV_MCTS
             largeNetBackup ? transposVisits = it->node->get_large_net_visits(it->childIdx):
+#endif
                              transposVisits = it->node->get_real_visits(it->childIdx);
             if (transposVisits != 0) {
 #ifdef MPV_MCTS

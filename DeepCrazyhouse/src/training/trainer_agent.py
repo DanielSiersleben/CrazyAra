@@ -246,24 +246,46 @@ class TrainerAgent:  # Probably needs refactoring
 
             for part_id in tqdm_notebook(self.ordering):
                 # load one chunk of the dataset from memory
-                _, x_train, yv_train, yp_train, _, _ = load_pgn_dataset(
-                    dataset_type="train", part_id=part_id, normalize=self.tc.normalize, verbose=False,
-                    q_value_ratio=self.tc.q_value_ratio
-                )
+                if self.tc.train_on_soft_labels:
+                    _, x_train, yv_train, yp_train, _, _, yv_soft, yp_soft = load_pgn_dataset(
+                        dataset_type="train", part_id=part_id, normalize=self.tc.normalize, verbose=False,
+                        q_value_ratio=self.tc.q_value_ratio, value_soft=self.tc.soft_value_name, policy_soft=self.tc.soft_policy_name
+                    )
+                    yp_soft = prepare_policy(y_policy=yp_soft,
+                                              select_policy_from_plane=True,
+                                              sparse_policy_label=False,
+                                              is_policy_from_plane_data=True)
+                    yp_train = prepare_policy(y_policy=yp_train,
+                                              select_policy_from_plane=self.tc.select_policy_from_plane,
+                                              sparse_policy_label=self.tc.sparse_policy_label,
+                                              is_policy_from_plane_data=False)
 
-                yp_train = prepare_policy(y_policy=yp_train, select_policy_from_plane=self.tc.select_policy_from_plane,
-                                          sparse_policy_label=self.tc.sparse_policy_label,
-                                          is_policy_from_plane_data=self.tc.is_policy_from_plane_data)
+                else:
+                    _, x_train, yv_train, yp_train, _, _ = load_pgn_dataset(
+                        dataset_type="train", part_id=part_id, normalize=self.tc.normalize, verbose=False,
+                        q_value_ratio=self.tc.q_value_ratio
+                    )
+                    yp_train = prepare_policy(y_policy=yp_train,
+                                              select_policy_from_plane=self.tc.select_policy_from_plane,
+                                              sparse_policy_label=self.tc.sparse_policy_label,
+                                              is_policy_from_plane_data=self.tc.is_policy_from_plane_data)
+
+
 
                 # update the train_data object
-                train_dataset = gluon.data.ArrayDataset(
-                    nd.array(x_train), nd.array(yv_train), nd.array(yp_train)
-                )
+                if self.tc.train_on_soft_labels:
+                    train_dataset = gluon.data.ArrayDataset(
+                        nd.array(x_train), nd.array(yv_train), nd.array(yp_train), nd.array(yp_soft), nd.array(yv_soft)
+                    )
+                else:
+                    train_dataset = gluon.data.ArrayDataset(
+                        nd.array(x_train), nd.array(yv_train), nd.array(yp_train)
+                    )
                 train_data = gluon.data.DataLoader(
                     train_dataset, batch_size=self.tc.batch_size, shuffle=True, num_workers=self.tc.cpu_count
                 )
 
-                for _, (data, value_label, policy_label) in enumerate(train_data):
+                for _, (data, value_label, policy_label, policy_soft, value_soft) in enumerate(train_data):
                     data = data.as_in_context(self._ctx)
                     value_label = value_label.as_in_context(self._ctx)
                     policy_label = policy_label.as_in_context(self._ctx)
@@ -277,10 +299,12 @@ class TrainerAgent:  # Probably needs refactoring
                     with autograd.record():
                         [value_out, policy_out] = self._net(data)
                         value_loss = self._l2_loss(value_out, value_label)
+                        value_soft_loss = self._softmax_cross_entropy(value_out, value_soft)
                         policy_loss = self._softmax_cross_entropy(policy_out, policy_label)
+                        policy_soft_loss = self._softmax_cross_entropy(policy_out, policy_soft)
                         # weight the components of the combined loss
                         combined_loss = (
-                            self.tc.val_loss_factor * value_loss + self.tc.policy_loss_factor * policy_loss
+                            self.tc.val_loss_factor * (value_loss * self.tc.hard_label_weight + value_soft_loss * (1-self.tc.hard_label_weight)) + self.tc.policy_loss_factor * (policy_loss * self.tc.hard_label_weight + (1- self.tc.hard_label_weight) * policy_soft_loss)
                         )
                         # update a dummy metric to see a proper progress bar
                         # self._metrics['value_loss'].update(preds=value_out, labels=value_label)
