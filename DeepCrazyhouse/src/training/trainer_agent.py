@@ -55,7 +55,7 @@ def cross_entropy(y_true, y_pred):
     :param eps: Epsilon value to avoid taking log of 0
     :return:
     """
-    return -(np.sum(y_true * np.log(y_pred+1e-12), axis=1)).mean()
+    return -(np.sum(y_true * np.log(y_pred + 1e-12), axis=1)).mean()
 
 
 def evaluate_metrics(metrics, data_iterator, net, nb_batches=None, ctx=mx.gpu(), sparse_policy_label=False,
@@ -84,6 +84,11 @@ def evaluate_metrics(metrics, data_iterator, net, nb_batches=None, ctx=mx.gpu(),
         [value_out, policy_out] = net(data)
         value_out[0][0].wait_to_read()
 
+        if not sparse_policy_label:  # these metrics only accept one-hot encoded targets
+            policy_label = nd.argmax(policy_label, axis=1)
+        if apply_select_policy_from_plane:
+            policy_out = policy_out[:, FLAT_PLANE_IDX]
+
         # update the metrics
         metrics["value_loss"].update(preds=value_out, labels=value_label)
         metrics["policy_loss"].update(preds=nd.SoftmaxActivation(policy_out),
@@ -91,6 +96,54 @@ def evaluate_metrics(metrics, data_iterator, net, nb_batches=None, ctx=mx.gpu(),
         metrics["value_acc_sign"].update(preds=value_out, labels=value_label)
         metrics["policy_acc"].update(preds=nd.argmax(policy_out, axis=1),
                                      labels=policy_label)
+        # stop after evaluating x batches (only recommended to use this for the train set evaluation)
+        if nb_batches and i == nb_batches:
+            break
+
+    metric_values = {"loss": 0.01 * metrics["value_loss"].get()[1] + 0.99 * metrics["policy_loss"].get()[1]}
+
+    for metric in metrics.values():
+        metric_values[metric.get()[0]] = metric.get()[1]
+    return metric_values
+
+
+def evaluate_metrics_soft(metrics, data_iterator, net, nb_batches=None, ctx=mx.gpu(), sparse_policy_label=False,
+                     apply_select_policy_from_plane=True):
+    """
+    Runs inference of the network on a data_iterator object and evaluates the given metrics.
+    The metric results are returned as a dictionary object.
+
+    :param metrics: List of mxnet metrics which must have the
+    names ['value_loss', 'policy_loss', 'value_acc_sign', 'policy_acc']
+    :param data_iterator: Gluon data iterator object
+    :param net: Gluon network handle
+    :param nb_batches: Number of batches to evaluate (early stopping).
+     If set to None all batches of the data_iterator will be evaluated
+    :param ctx: MXNET data context
+    :param sparse_policy_label: Should be set to true if the policy uses one-hot encoded targets
+     (e.g. supervised learning)
+    :param apply_select_policy_from_plane: If true, given policy label is converted to policy map index
+    :return:
+    """
+    reset_metrics(metrics)
+    for i, (data, value_label, policy_label, policy_soft, value_soft) in enumerate(data_iterator):
+        data = data.as_in_context(ctx)
+        value_label = value_label.as_in_context(ctx)
+        policy_label = policy_label.as_in_context(ctx)
+        policy_soft = policy_soft.as_in_context(ctx)
+        value_soft = value_soft.as_in_context(ctx)
+        [value_out, policy_out] = net(data)
+        value_out[0][0].wait_to_read()
+
+        policy_soft = nd.argmax(policy_soft, axis=1)
+
+        # update the metrics
+        metrics["value_loss"].update(preds=value_out, labels=value_soft)
+        metrics["policy_loss"].update(preds=nd.SoftmaxActivation(policy_out),
+                                      labels=policy_soft)
+        metrics["value_acc_sign"].update(preds=value_out, labels=value_soft)
+        metrics["policy_acc"].update(preds=nd.argmax(policy_out, axis=1),
+                                     labels=policy_soft)
         # stop after evaluating x batches (only recommended to use this for the train set evaluation)
         if nb_batches and i == nb_batches:
             break
@@ -116,11 +169,11 @@ class TrainerAgent:  # Probably needs refactoring
     """Main training loop"""
 
     def __init__(
-        self,
-        net,
-        val_data,
-        train_config: TrainConfig,
-        train_objects: TrainObjects,
+            self,
+            net,
+            val_data,
+            train_config: TrainConfig,
+            train_objects: TrainObjects,
     ):
         # Too many instance attributes (29/7) - Too many arguments (24/5) - Too many local variables (25/15)
         # Too few public methods (1/2)
@@ -153,7 +206,8 @@ class TrainerAgent:  # Probably needs refactoring
         # collect parameter names for logging the gradients of parameters in each epoch
         self._params = self._net.collect_params()
         self._param_names = self._params.keys()
-        self.ordering = list(range(self.tc.nb_parts))  # define a list which describes the order of the processed batches
+        self.ordering = list(
+            range(self.tc.nb_parts))  # define a list which describes the order of the processed batches
 
     def _log_metrics(self, metric_values, global_step, prefix="train_"):
         """
@@ -217,7 +271,7 @@ class TrainerAgent:  # Probably needs refactoring
         k_steps_end = round(self.tc.total_it / self.tc.batch_steps)
         # we use k-steps instead of epochs here
         self.rtpt = RTPT(name_initials=self.tc.name_initials, experiment_name='crazyara',
-                         max_iterations=k_steps_end-self.tc.k_steps_initial)
+                         max_iterations=k_steps_end - self.tc.k_steps_initial)
         if cur_it is None:
             cur_it = self.tc.k_steps_initial * 1000
         nb_spikes = 0  # count the number of spikes that have been detected
@@ -245,12 +299,13 @@ class TrainerAgent:  # Probably needs refactoring
                 if self.tc.train_on_soft_labels:
                     _, x_train, yv_train, yp_train, _, _, yv_soft, yp_soft = load_pgn_dataset(
                         dataset_type="train", part_id=part_id, normalize=self.tc.normalize, verbose=False,
-                        q_value_ratio=self.tc.q_value_ratio, value_soft=self.tc.soft_value_name, policy_soft=self.tc.soft_policy_name
+                        q_value_ratio=self.tc.q_value_ratio, value_soft=self.tc.soft_value_name,
+                        policy_soft=self.tc.soft_policy_name
                     )
                     yp_soft = prepare_policy(y_policy=yp_soft,
-                                              select_policy_from_plane=True,
-                                              sparse_policy_label=False,
-                                              is_policy_from_plane_data=True)
+                                             select_policy_from_plane=True,
+                                             sparse_policy_label=False,
+                                             is_policy_from_plane_data=True)
                     yp_train = prepare_policy(y_policy=yp_train,
                                               select_policy_from_plane=self.tc.select_policy_from_plane,
                                               sparse_policy_label=self.tc.sparse_policy_label,
@@ -265,8 +320,6 @@ class TrainerAgent:  # Probably needs refactoring
                                               select_policy_from_plane=self.tc.select_policy_from_plane,
                                               sparse_policy_label=self.tc.sparse_policy_label,
                                               is_policy_from_plane_data=self.tc.is_policy_from_plane_data)
-
-
 
                 # update the train_data object
                 if self.tc.train_on_soft_labels:
@@ -286,6 +339,9 @@ class TrainerAgent:  # Probably needs refactoring
                     value_label = value_label.as_in_context(self._ctx)
                     policy_label = policy_label.as_in_context(self._ctx)
 
+                    value_soft = value_soft.as_in_context(self._ctx)
+                    policy_soft = policy_soft.as_in_context(self._ctx)
+
                     # update a dummy metric to see a proper progress bar
                     #  (the metrics will get evaluated at the end of 100k steps)
                     if batch_proc_tmp > 0:
@@ -295,12 +351,15 @@ class TrainerAgent:  # Probably needs refactoring
                     with autograd.record():
                         [value_out, policy_out] = self._net(data)
                         value_loss = self._l2_loss(value_out, value_label)
-                        value_soft_loss = self._softmax_cross_entropy(value_out, value_soft)
+                        value_soft_loss = self._l2_loss(value_out, value_soft)
                         policy_loss = self._softmax_cross_entropy(policy_out, policy_label)
                         policy_soft_loss = self._softmax_cross_entropy(policy_out, policy_soft)
                         # weight the components of the combined loss
                         combined_loss = (
-                            self.tc.val_loss_factor * (value_loss * self.tc.hard_label_weight + value_soft_loss * (1-self.tc.hard_label_weight)) + self.tc.policy_loss_factor * (policy_loss * self.tc.hard_label_weight + (1- self.tc.hard_label_weight) * policy_soft_loss)
+                                self.tc.val_loss_factor * (value_loss * self.tc.hard_label_weight + value_soft_loss * (
+                                    1 - self.tc.hard_label_weight)) + self.tc.policy_loss_factor * (
+                                            policy_loss * self.tc.hard_label_weight + (
+                                                1 - self.tc.hard_label_weight) * policy_soft_loss)
                         )
                         # update a dummy metric to see a proper progress bar
                         # self._metrics['value_loss'].update(preds=value_out, labels=value_label)
@@ -330,14 +389,14 @@ class TrainerAgent:  # Probably needs refactoring
                         logging.info("-------------------------")
                         logging.debug("Iteration %d/%d", cur_it, self.tc.total_it)
                         logging.debug("lr: %.7f - momentum: %.7f", learning_rate, momentum)
-                        train_metric_values = evaluate_metrics(
+                        train_metric_values = evaluate_metrics_soft(
                             self.to.metrics,
                             train_data,
                             self._net,
-                            nb_batches=10, #25,
+                            nb_batches=10,  # 25,
                             ctx=self._ctx,
                             sparse_policy_label=self.tc.sparse_policy_label,
-                            apply_select_policy_from_plane=self.tc.select_policy_from_plane and not self.tc.is_policy_from_plane_data
+                            apply_select_policy_from_plane=False
                         )
                         val_metric_values = evaluate_metrics(
                             self.to.metrics,
@@ -346,13 +405,13 @@ class TrainerAgent:  # Probably needs refactoring
                             nb_batches=None,
                             ctx=self._ctx,
                             sparse_policy_label=self.tc.sparse_policy_label,
-                            apply_select_policy_from_plane=self.tc.select_policy_from_plane and not self.tc.is_policy_from_plane_data
+                            apply_select_policy_from_plane=True
                         )
                         # update process title according to loss
                         self.rtpt.step(subtitle=f"loss={val_metric_values['loss']:2.2f}")
                         if self.tc.use_spike_recovery and (
-                            old_val_loss * self.tc.spike_thresh < val_metric_values["loss"]
-                            or np.isnan(val_metric_values["loss"])
+                                old_val_loss * self.tc.spike_thresh < val_metric_values["loss"]
+                                or np.isnan(val_metric_values["loss"])
                         ):  # check for spikes
                             nb_spikes += 1
                             logging.warning(

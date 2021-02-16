@@ -39,7 +39,7 @@ void MPVSearchThread::thread_iteration()
     if(nodeQueue->batch_is_ready()){
         create_mpv_mini_batch();
 
-        net->predict(nodeQueue->getInputBuffer(), valueOutputs, probOutputs);
+        net->predict(nodeQueue->getInputBuffer(), valueOutputs, probOutputs, auxiliaryOutputs);
 
         // now all buffers can be reused
         nodeQueue->mark_batch_completed();

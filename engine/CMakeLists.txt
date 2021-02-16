@@ -17,7 +17,7 @@ option(MODE_OPEN_SPIEL           "Build with open_spiel environment support"  OF
 option(SEARCH_UCT                "Build with UCT instead of PUCT search"  OFF)
 
 # enable MPV_MCTS
-option(MPV_MCTS           "Build with Multiple Policy Value MCTS"  ON)
+option(MPV_MCTS           "Build with Multiple Policy Value MCTS"  OFF)
 
 if (MPV_MCTS)
     add_definitions(-DMPV_MCTS)

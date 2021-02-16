@@ -297,10 +297,10 @@ class TrainerAgentMXNET:  # Probably needs refactoring
                                                      self.tc.batch_size,
                                                      shuffle=True)
 
-                    self._train_iter = mx.io.NDArrayIter({'data': self.x_train},
-                                                         {'value_label': self.yv_train, 'policy_label': self.yp_train},
-                                                         self._batch_size,
-                                                         shuffle=True)
+                self._train_iter = mx.io.NDArrayIter({'data': self.x_train},
+                                                     {'value_label': self.yv_train, 'policy_label': self.yp_train},
+                                                     self._batch_size,
+                                                     shuffle=True)
 
                 # avoid memory leaks by adding synchronization
                 mx.nd.waitall()
