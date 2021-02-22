@@ -13,6 +13,8 @@ class TrainConfig:
     """Class which stores all training configuration"""
 
     train_on_soft_labels: bool = True
+    train_on_logits: bool = False
+    softmax_temperature: int = 10 # only applied on logits
     soft_value_name: str = "y_value_prediction_risev2_27"
     soft_policy_name: str = "y_policy_prediction_risev2_27"
     hard_label_weight: float = 0.25
@@ -20,6 +22,9 @@ class TrainConfig:
     # div factor is a constant which can be used to reduce the batch size and learning rate respectively
     # use a value higher 1 if you encounter memory allocation errors
     div_factor: int = 1
+
+    # directory to write and read weight, log, onnx and other export files
+    export_dir: str = "./"
 
     # 1024 # the batch_size needed to be reduced to 1024 in order to fit in the GPU 1080Ti
     # 4096 was originally used in the paper -> works slower for current GPU
@@ -73,7 +78,7 @@ class TrainConfig:
 
     # name initials which are used to identify running training processes with rtpt
     # prefix for the process name in order to identify the process on a server
-    name_initials: str = "DS"
+    name_initials: str = "JC"
 
     nb_parts: int = None
 

@@ -14,6 +14,7 @@ import mxnet as mx
 from mxnet import autograd, gluon, nd
 import numpy as np
 from mxboard import SummaryWriter
+from scipy.special import logsumexp
 from tqdm import tqdm_notebook
 from rtpt import RTPT
 from DeepCrazyhouse.src.domain.variants.plane_policy_representation import FLAT_PLANE_IDX
@@ -108,7 +109,7 @@ def evaluate_metrics(metrics, data_iterator, net, nb_batches=None, ctx=mx.gpu(),
 
 
 def evaluate_metrics_soft(metrics, data_iterator, net, nb_batches=None, ctx=mx.gpu(), sparse_policy_label=False,
-                     apply_select_policy_from_plane=True):
+                          apply_select_policy_from_plane=True):
     """
     Runs inference of the network on a data_iterator object and evaluates the given metrics.
     The metric results are returned as a dictionary object.
@@ -165,6 +166,12 @@ def reset_metrics(metrics):
         metric.reset()
 
 
+def softened_softmax(x, temperature=1):
+    """Compute softmax values for each sets of scores in x."""
+    x = x / temperature
+    return np.exp(x - logsumexp(x, axis=1, keepdims=True))
+
+
 class TrainerAgent:  # Probably needs refactoring
     """Main training loop"""
 
@@ -187,7 +194,7 @@ class TrainerAgent:  # Probably needs refactoring
         self._val_data = val_data
         # define a summary writer that logs data and flushes to the file every 5 seconds
         if self.tc.log_metrics_to_tensorboard:
-            self.sum_writer = SummaryWriter(logdir=self.tc.export_dir+"logs", flush_secs=5, verbose=False)
+            self.sum_writer = SummaryWriter(logdir=self.tc.export_dir + "logs", flush_secs=5, verbose=False)
         # Define the two loss functions
         self._softmax_cross_entropy = gluon.loss.SoftmaxCrossEntropyLoss(sparse_label=self.tc.sparse_policy_label)
         self._l2_loss = gluon.loss.L2Loss()
@@ -302,10 +309,8 @@ class TrainerAgent:  # Probably needs refactoring
                         q_value_ratio=self.tc.q_value_ratio, value_soft=self.tc.soft_value_name,
                         policy_soft=self.tc.soft_policy_name
                     )
-                    yp_soft = prepare_policy(y_policy=yp_soft,
-                                             select_policy_from_plane=True,
-                                             sparse_policy_label=False,
-                                             is_policy_from_plane_data=True)
+                    if self.tc.train_on_logits:
+                        yp_soft = softened_softmax(yp_soft, self.tc.softmax_temperature)
                     yp_train = prepare_policy(y_policy=yp_train,
                                               select_policy_from_plane=self.tc.select_policy_from_plane,
                                               sparse_policy_label=self.tc.sparse_policy_label,
@@ -334,13 +339,17 @@ class TrainerAgent:  # Probably needs refactoring
                     train_dataset, batch_size=self.tc.batch_size, shuffle=True, num_workers=self.tc.cpu_count
                 )
 
-                for _, (data, value_label, policy_label, policy_soft, value_soft) in enumerate(train_data):
+                for _, iteration in enumerate(train_data):
+                    if self.tc.train_on_soft_labels:
+                        (data, value_label, policy_label, policy_soft, value_soft) = iteration
+                        value_soft = value_soft.as_in_context(self._ctx)
+                        policy_soft = policy_soft.as_in_context(self._ctx)
+                    else:
+                        (data, value_label, policy_label) = iteration
+
                     data = data.as_in_context(self._ctx)
                     value_label = value_label.as_in_context(self._ctx)
                     policy_label = policy_label.as_in_context(self._ctx)
-
-                    value_soft = value_soft.as_in_context(self._ctx)
-                    policy_soft = policy_soft.as_in_context(self._ctx)
 
                     # update a dummy metric to see a proper progress bar
                     #  (the metrics will get evaluated at the end of 100k steps)
@@ -351,16 +360,23 @@ class TrainerAgent:  # Probably needs refactoring
                     with autograd.record():
                         [value_out, policy_out] = self._net(data)
                         value_loss = self._l2_loss(value_out, value_label)
-                        value_soft_loss = self._l2_loss(value_out, value_soft)
                         policy_loss = self._softmax_cross_entropy(policy_out, policy_label)
-                        policy_soft_loss = self._softmax_cross_entropy(policy_out, policy_soft)
-                        # weight the components of the combined loss
-                        combined_loss = (
-                                self.tc.val_loss_factor * (value_loss * self.tc.hard_label_weight + value_soft_loss * (
-                                    1 - self.tc.hard_label_weight)) + self.tc.policy_loss_factor * (
+                        if self.tc.train_on_soft_labels:
+                            value_soft_loss = self._l2_loss(value_out, value_soft)
+                            policy_soft_loss = self._softmax_cross_entropy(policy_out, policy_soft)
+                            # weight the components of the combined loss
+                            combined_loss = (
+                                    self.tc.val_loss_factor * (
+                                        value_loss * self.tc.hard_label_weight + value_soft_loss * (
+                                        1 - self.tc.hard_label_weight)) + self.tc.policy_loss_factor * (
                                             policy_loss * self.tc.hard_label_weight + (
-                                                1 - self.tc.hard_label_weight) * policy_soft_loss)
-                        )
+                                            1 - self.tc.hard_label_weight) * policy_soft_loss)
+                            )
+                        else:
+                            combined_loss = (
+                                    self.tc.val_loss_factor * value_loss + self.tc.policy_loss_factor * policy_loss
+                            )
+
                         # update a dummy metric to see a proper progress bar
                         # self._metrics['value_loss'].update(preds=value_out, labels=value_label)
 
@@ -389,15 +405,27 @@ class TrainerAgent:  # Probably needs refactoring
                         logging.info("-------------------------")
                         logging.debug("Iteration %d/%d", cur_it, self.tc.total_it)
                         logging.debug("lr: %.7f - momentum: %.7f", learning_rate, momentum)
-                        train_metric_values = evaluate_metrics_soft(
-                            self.to.metrics,
-                            train_data,
-                            self._net,
-                            nb_batches=10,  # 25,
-                            ctx=self._ctx,
-                            sparse_policy_label=self.tc.sparse_policy_label,
-                            apply_select_policy_from_plane=False
-                        )
+
+                        if self.tc.train_on_soft_labels:
+                            train_metric_values = evaluate_metrics_soft(
+                                self.to.metrics,
+                                train_data,
+                                self._net,
+                                nb_batches=10,  # 25,
+                                ctx=self._ctx,
+                                sparse_policy_label=self.tc.sparse_policy_label,
+                                apply_select_policy_from_plane=False
+                            )
+                        else:
+                            train_metric_values = evaluate_metrics(
+                                self.to.metrics,
+                                train_data,
+                                self._net,
+                                nb_batches=10,  # 25,
+                                ctx=self._ctx,
+                                sparse_policy_label=self.tc.sparse_policy_label,
+                                apply_select_policy_from_plane=self.tc.select_policy_from_plane and not self.tc.is_policy_from_plane_data
+                            )
                         val_metric_values = evaluate_metrics(
                             self.to.metrics,
                             self._val_data,
@@ -407,6 +435,7 @@ class TrainerAgent:  # Probably needs refactoring
                             sparse_policy_label=self.tc.sparse_policy_label,
                             apply_select_policy_from_plane=True
                         )
+
                         # update process title according to loss
                         self.rtpt.step(subtitle=f"loss={val_metric_values['loss']:2.2f}")
                         if self.tc.use_spike_recovery and (
